@@ -1,3 +1,27 @@
+# Canvas – UCSD Grades, Assignments & Announcements
+
+View your UCSD Canvas grades, assignments (due/incomplete and completed), and announcements. Use either **Log in with Canvas** (OAuth) or paste a manual access token.
+
+## Quick start
+
+1. **Manual token (no setup)**  
+   Run `npm run dev`, open the app, then go to [Canvas → Settings → Approved Integrations](https://canvas.ucsd.edu/profile/settings) and create a new access token. Paste the token (and Canvas URL) in the form.
+
+2. **Log in with Canvas (OAuth)**  
+   You need a Canvas Developer Key from your institution (e.g. UCSD admin). Then:
+
+   - Copy `.env.example` to `.env` and set:
+     - `CANVAS_CLIENT_ID` – Developer Key client ID  
+     - `CANVAS_CLIENT_SECRET` – Developer Key client secret  
+     - `CANVAS_BASE_URL` – e.g. `https://canvas.ucsd.edu`  
+     - `OAUTH_REDIRECT_URI` – e.g. `http://localhost:5173/oauth/callback`  
+   - In the Canvas Developer Key settings, add that exact redirect URI.
+   - Run the OAuth server: `npm run server` (in one terminal).
+   - Run the app: `npm run dev` (in another terminal).
+   - Click **Log in with Canvas** and complete the login; the app will receive the access token.
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
