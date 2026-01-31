@@ -13,7 +13,10 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 const navItems = [
   { icon: Megaphone, label: "Announcements", href: "/announcements" },
@@ -27,6 +30,12 @@ const navItems = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   return (
     <aside
@@ -59,8 +68,21 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Collapse Button */}
-        <div className="border-t border-sidebar-border p-3">
+        {/* Footer Actions */}
+        <div className="mt-auto border-t border-sidebar-border p-3 space-y-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className={cn(
+              "w-full justify-center text-red-500/70 hover:bg-red-500/10 hover:text-red-500 transition-colors",
+              !collapsed && "justify-start"
+            )}
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!collapsed && <span className="ml-3 font-bold uppercase text-[10px] tracking-widest">Sign Out</span>}
+          </Button>
+
           <Button
             variant="ghost"
             size="sm"
@@ -75,7 +97,7 @@ export function Sidebar() {
             ) : (
               <>
                 <ChevronLeft className="h-4 w-4 mr-2" />
-                <span>Collapse</span>
+                <span className="text-[10px] uppercase font-bold tracking-widest">Collapse</span>
               </>
             )}
           </Button>
@@ -84,3 +106,4 @@ export function Sidebar() {
     </aside>
   );
 }
+

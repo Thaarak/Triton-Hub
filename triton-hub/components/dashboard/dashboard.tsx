@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import type { Update, FilterType } from "@/lib/types";
 import { Navbar } from "./navbar";
 import { Sidebar } from "./sidebar";
 import { StatsSidebar } from "./stats-sidebar";
 import { FilterBar } from "./filter-bar";
 import { UpdateFeed } from "./update-feed";
-import { CanvasSyncCard } from "./canvas-sync-card";
 import { CourseList } from "./course-list";
 import { format } from "date-fns";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
+import { syncCanvasData } from "@/lib/canvas";
+import { toast } from "sonner";
 
 export function Dashboard() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
@@ -31,8 +33,36 @@ export function Dashboard() {
     announcements: any[];
   } | null>(null);
 
-  const handleSyncComplete = useCallback((data: any) => {
-    setCanvasData(data);
+  useEffect(() => {
+    const initSync = async () => {
+      setIsLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('canvas_token')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile?.canvas_token) {
+          try {
+            const data = await syncCanvasData(profile.canvas_token);
+            setCanvasData(data);
+          } catch (syncError) {
+            console.error("Sync failed:", syncError);
+            toast.error("Failed to sync with Canvas");
+          }
+        }
+      } catch (error) {
+        console.error("Profile fetch error:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initSync();
   }, []);
 
   const handleCourseClick = useCallback((courseCode: string) => {
@@ -267,19 +297,18 @@ export function Dashboard() {
             canvasData ? (
               <CourseList classes={canvasData.classes} onCourseClick={handleCourseClick} />
             ) : (
-              <div className="max-w-md mx-auto pt-8">
-                <CanvasSyncCard onSyncComplete={handleSyncComplete} />
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                <div className="p-4 rounded-full bg-muted/50 mb-4 animate-pulse">
+                  <span className="text-4xl">📚</span>
+                </div>
+                <h3 className="text-lg font-medium text-foreground">Syncing Canvas Data...</h3>
+                <p className="max-w-xs text-center text-sm mt-2">
+                  We are fetching your latest classes and assignments from UCSD Canvas.
+                </p>
               </div>
             )
           ) : (
             <>
-              {/* Show sync card if looking at categories and not synced */}
-              {(activeFilter === 'all' || activeFilter === 'canvas' || activeFilter === 'announcement') && !canvasData && !selectedCourseCode && (
-                <div className="mb-8">
-                  <CanvasSyncCard onSyncComplete={handleSyncComplete} />
-                </div>
-              )}
-
               <UpdateFeed
                 updates={combinedUpdates}
                 filter={selectedCourseCode ? 'all' : activeFilter}
