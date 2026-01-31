@@ -3,7 +3,6 @@ import os
 from flask import Flask
 from dotenv import load_dotenv
 
-from routes.user_auth import user_auth
 from routes.google_auth import google_auth
 from routes.canvas_auth import canvas_auth
 from routes.emails import emails
@@ -13,7 +12,6 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
 
-app.register_blueprint(user_auth)
 app.register_blueprint(google_auth)
 app.register_blueprint(canvas_auth)
 app.register_blueprint(emails)
