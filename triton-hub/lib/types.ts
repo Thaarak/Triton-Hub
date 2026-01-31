@@ -1,6 +1,6 @@
 export type Source = "canvas" | "email" | "piazza";
 
-export type Category = "announcement" | "exam" | "assignment" | "event";
+export type Category = "announcement" | "exam" | "assignment" | "event" | "grade";
 
 export type Update = {
   id: string;
@@ -14,6 +14,8 @@ export type Update = {
   priority?: "urgent" | "normal";
   course?: string;
   dueDate?: Date;
+  isCompleted?: boolean;
+  subCategory?: string;
 };
 
-export type FilterType = "all" | "canvas" | "email" | "piazza" | "urgent" | Category;
+export type FilterType = "all" | "canvas" | "email" | "piazza" | "urgent" | "classes" | Category;

@@ -14,7 +14,8 @@ interface FilterBarProps {
 
 const filters: { value: FilterType; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "canvas", label: "Canvas" },
+  { value: "classes", label: "Classes" },
+  { value: "announcement", label: "Announcements" },
   { value: "email", label: "Email" },
   { value: "piazza", label: "Piazza" },
   { value: "urgent", label: "Urgent" },

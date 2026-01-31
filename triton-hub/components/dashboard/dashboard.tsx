@@ -1,64 +1,248 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { mockUpdates } from "@/lib/mock-data";
+import { useState, useCallback, useMemo } from "react";
 import type { Update, FilterType } from "@/lib/types";
 import { Navbar } from "./navbar";
 import { Sidebar } from "./sidebar";
 import { StatsSidebar } from "./stats-sidebar";
 import { FilterBar } from "./filter-bar";
 import { UpdateFeed } from "./update-feed";
+import { CanvasSyncCard } from "./canvas-sync-card";
+import { CourseList } from "./course-list";
 import { format } from "date-fns";
+import { ChevronLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function Dashboard() {
-  const [updates, setUpdates] = useState<Update[]>(mockUpdates);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedCourseCode, setSelectedCourseCode] = useState<string | null>(null);
+
+  // Local state for user actions
+  const [readUpdates, setReadUpdates] = useState<Set<string>>(new Set());
+  const [completedUpdates, setCompletedUpdates] = useState<Set<string>>(new Set());
+
+  // Canvas State
+  const [canvasData, setCanvasData] = useState<{
+    classes: any[];
+    assignments: any[];
+    grades: any[];
+    announcements: any[];
+  } | null>(null);
+
+  const handleSyncComplete = useCallback((data: any) => {
+    setCanvasData(data);
+  }, []);
+
+  const handleCourseClick = useCallback((courseCode: string) => {
+    setSelectedCourseCode(courseCode);
+    setActiveFilter("all");
+  }, []);
+
+  const handleBackToClasses = useCallback(() => {
+    setSelectedCourseCode(null);
+    setActiveFilter("classes");
+  }, []);
+
+  // Transform Canvas data into the unified Update format
+  const combinedUpdates = useMemo(() => {
+    if (!canvasData) return [];
+
+    const updates: Update[] = [];
+
+    // 1. Assignments -> Updates
+    const now = new Date();
+    canvasData.assignments.forEach(a => {
+      // Don't show assignments if they are already graded and the due date has passed
+      const isPastValue = a.dueAt && new Date(a.dueAt).getTime() < now.getTime();
+      if (a.score !== null && isPastValue) return;
+
+      // Filter by selected course if applicable
+      if (selectedCourseCode && a.courseCode !== selectedCourseCode) return;
+
+      const id = `canvas-assign-${a.id}`;
+      const isLocallyCompleted = completedUpdates.has(id);
+      // If it has a score, we consider it completed
+      const isCompleted = !!a.submittedAt || isLocallyCompleted || a.score !== null;
+
+      // Determine subCategory based on title
+      const title = a.name.toLowerCase();
+      let subCategory = "Assignment";
+      if (title.includes("quiz") || title.includes("test")) subCategory = "Quiz";
+      else if (title.includes("midterm") || title.includes("final") || title.includes("exam")) subCategory = "Exam";
+      else if (title.includes("project")) subCategory = "Project";
+      else if (title.includes("lab")) subCategory = "Lab";
+      else if (title.includes("homework")) subCategory = "Homework";
+
+      const dueDate = a.dueAt ? new Date(a.dueAt) : undefined;
+      const isUrgent = dueDate && !isCompleted && (dueDate.getTime() - now.getTime() < 86400000 * 2);
+
+      updates.push({
+        id,
+        source: "canvas",
+        category: "assignment",
+        subCategory,
+        title: a.name,
+        snippet: `Assignment for ${a.courseName}. Points possible: ${a.pointsPossible || 'N/A'}`,
+        timestamp: dueDate || now,
+        url: a.htmlUrl,
+        unread: !isCompleted && !readUpdates.has(id),
+        course: a.courseCode,
+        dueDate: dueDate,
+        isCompleted: isCompleted,
+        priority: isUrgent ? "urgent" : "normal"
+      });
+    });
+
+    // 2. Announcements -> Updates
+    canvasData.announcements.forEach(a => {
+      // Filter by selected course if applicable
+      if (selectedCourseCode && a.courseCode !== selectedCourseCode) return;
+
+      const id = `canvas-ann-${a.id}`;
+      const title = a.title || "";
+      const isImportant = /urgent|important|due|action required|reminder/i.test(title);
+      const isUnread = !readUpdates.has(id);
+
+      updates.push({
+        id,
+        source: "canvas",
+        category: "announcement",
+        title: a.title,
+        snippet: a.message?.replace(/<[^>]*>?/gm, '').substring(0, 150) + '...',
+        timestamp: new Date(a.postedAt),
+        url: a.htmlUrl,
+        unread: isUnread,
+        course: a.courseCode,
+        priority: (isImportant && isUnread) ? "urgent" : "normal"
+      });
+    });
+
+    // 3. Grades -> Updates
+    canvasData.grades.forEach(g => {
+      if (g.currentGrade || g.currentScore) {
+        // Filter by selected course if applicable
+        if (selectedCourseCode && g.courseCode !== selectedCourseCode) return;
+
+        const id = `canvas-grade-${g.id}`;
+        const isUnread = !readUpdates.has(id);
+        updates.push({
+          id,
+          source: "canvas",
+          category: "grade",
+          title: `Grade Update: ${g.name}`,
+          snippet: g.currentGrade && g.currentGrade !== 'N/A'
+            ? `Current Grade: ${g.currentGrade} (${g.currentScore != null ? g.currentScore + '%' : '—'})`
+            : `Current Score: ${g.currentScore != null ? g.currentScore + '%' : '—'} (Grade: —)`,
+          timestamp: now,
+          url: g.gradesUrl,
+          unread: isUnread,
+          course: g.courseCode,
+          priority: isUnread ? "urgent" : "normal" // New grades are high priority
+        });
+      }
+    });
+
+    // Filter out completed assignments in the "All" tab
+    let filteredUpdates = updates;
+    if (activeFilter === "all" || activeFilter === "urgent") {
+      filteredUpdates = updates.filter(u => !u.isCompleted);
+    }
+
+    // Unified Smart Sorting: Urgency + Proximity (Lowest in About)
+    return filteredUpdates.sort((a, b) => {
+      const nowTime = now.getTime();
+
+      // Helper to check if item is effectively "Pending" (Unread or Uncompleted)
+      const isPending = (u: Update) => {
+        if (u.category === 'assignment') return !u.isCompleted;
+        return u.unread;
+      };
+
+      const aPending = isPending(a);
+      const bPending = isPending(b);
+
+      // 1. Prioritize Urgent Pending Items
+      const aUrgent = aPending && a.priority === "urgent";
+      const bUrgent = bPending && b.priority === "urgent";
+      if (aUrgent && !bUrgent) return -1;
+      if (!aUrgent && bUrgent) return 1;
+
+      // 2. Prioritize Normal Pending Items
+      if (aPending && !bPending) return -1;
+      if (!aPending && bPending) return 1;
+
+      // 3. Within the same pending status, sort by proximity "Lowest in About"
+      // Helper: assignments with NO due date should be pushed to the bottom of the pending list
+      const aNoDueDate = a.category === 'assignment' && !a.dueDate;
+      const bNoDueDate = b.category === 'assignment' && !b.dueDate;
+
+      if (aPending && bPending) {
+        if (aNoDueDate && !bNoDueDate) return 1;
+        if (!aNoDueDate && bNoDueDate) return -1;
+
+        const aDist = Math.abs(a.timestamp.getTime() - nowTime);
+        const bDist = Math.abs(b.timestamp.getTime() - nowTime);
+        return aDist - bDist;
+      }
+
+      // 4. For everything else (Read/Finished), sort by newest first
+      return b.timestamp.getTime() - a.timestamp.getTime();
+    });
+  }, [canvasData, readUpdates, completedUpdates, selectedCourseCode, activeFilter]);
 
   const handleMarkRead = useCallback((id: string) => {
-    // Optimistic update
-    setUpdates((prev) =>
-      prev.map((update) =>
-        update.id === id ? { ...update, unread: false } : update
-      )
-    );
+    // If it's an assignment, we mark it as completed
+    if (id.startsWith('canvas-assign-')) {
+      setCompletedUpdates(prev => new Set(prev).add(id));
+    }
+    setReadUpdates(prev => new Set(prev).add(id));
   }, []);
 
   const handleRefresh = useCallback(() => {
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1500);
+    setTimeout(() => setIsLoading(false), 1500);
   }, []);
 
-  const unreadCount = updates.filter((u) => u.unread).length;
+  const unreadCount = combinedUpdates.filter((u) => u.unread).length;
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Navbar */}
       <Navbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />
-
-      {/* Sidebar */}
       <Sidebar />
-
-      {/* Stats Sidebar */}
       <StatsSidebar />
 
-      {/* Main Content */}
       <main className="pt-16 pb-20 sm:pb-0 sm:pl-56 xl:pr-72 transition-all duration-300">
         <div className="p-4 sm:p-6 lg:p-8 max-w-4xl">
           {/* Header */}
           <div className="mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">
-                  Your Updates
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {unreadCount} unread notifications across all platforms
-                </p>
+              <div className="flex items-center gap-3">
+                {selectedCourseCode && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleBackToClasses}
+                    className="rounded-full h-8 w-8 hover:bg-secondary"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                )}
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground">
+                    {selectedCourseCode
+                      ? selectedCourseCode
+                      : (activeFilter === "classes" ? "My Courses" : "Your Updates")}
+                  </h1>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {selectedCourseCode
+                      ? `Viewing assignments and updates for ${selectedCourseCode}`
+                      : (activeFilter === "classes"
+                        ? "Viewing your current semester classes and professors"
+                        : `${unreadCount} unread notifications across all platforms`)}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="hidden sm:inline">Showing updates from</span>
@@ -69,22 +253,42 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Filters */}
-          <FilterBar
-            activeFilter={activeFilter}
-            onFilterChange={setActiveFilter}
-            isLoading={isLoading}
-            onRefresh={handleRefresh}
-          />
+          {!selectedCourseCode && (
+            <FilterBar
+              activeFilter={activeFilter}
+              onFilterChange={setActiveFilter}
+              isLoading={isLoading}
+              onRefresh={handleRefresh}
+            />
+          )}
 
-          {/* Feed */}
-          <UpdateFeed
-            updates={updates}
-            filter={activeFilter}
-            searchQuery={searchQuery}
-            onMarkRead={handleMarkRead}
-            isLoading={isLoading}
-          />
+          {/* Logic for showing sync card vs content */}
+          {activeFilter === "classes" && !selectedCourseCode ? (
+            canvasData ? (
+              <CourseList classes={canvasData.classes} onCourseClick={handleCourseClick} />
+            ) : (
+              <div className="max-w-md mx-auto pt-8">
+                <CanvasSyncCard onSyncComplete={handleSyncComplete} />
+              </div>
+            )
+          ) : (
+            <>
+              {/* Show sync card if looking at categories and not synced */}
+              {(activeFilter === 'all' || activeFilter === 'canvas' || activeFilter === 'announcement') && !canvasData && !selectedCourseCode && (
+                <div className="mb-8">
+                  <CanvasSyncCard onSyncComplete={handleSyncComplete} />
+                </div>
+              )}
+
+              <UpdateFeed
+                updates={combinedUpdates}
+                filter={selectedCourseCode ? 'all' : activeFilter}
+                searchQuery={searchQuery}
+                onMarkRead={handleMarkRead}
+                isLoading={isLoading}
+              />
+            </>
+          )}
         </div>
       </main>
 
@@ -141,11 +345,10 @@ function MobileNavItem({
 
   return (
     <button
-      className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 text-xs transition-colors ${
-        active
-          ? "text-primary"
-          : "text-muted-foreground hover:text-foreground"
-      }`}
+      className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 text-xs transition-colors ${active
+        ? "text-primary"
+        : "text-muted-foreground hover:text-foreground"
+        }`}
     >
       {getIcon()}
       <span>{label}</span>

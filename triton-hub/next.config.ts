@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async rewrites() {
+    return [
+      {
+        source: '/canvas-api/:path*',
+        destination: 'https://canvas.ucsd.edu/:path*',
+      },
+    ];
+  },
 };
 
 export default nextConfig;

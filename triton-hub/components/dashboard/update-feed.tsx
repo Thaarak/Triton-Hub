@@ -21,13 +21,13 @@ export function UpdateFeed({
   isLoading,
 }: UpdateFeedProps) {
   const filteredUpdates = useMemo(() => {
-    return updates.filter((update) => {
+    const list = updates.filter((update) => {
       // Apply source/urgent filter
       if (filter !== "all") {
         if (filter === "urgent") {
           if (update.priority !== "urgent") return false;
         } else {
-          if (update.source !== filter) return false;
+          if (update.source !== filter && update.category !== filter) return false;
         }
       }
 
@@ -42,6 +42,8 @@ export function UpdateFeed({
 
       return true;
     });
+
+    return list;
   }, [updates, filter, searchQuery]);
 
   if (isLoading) {
@@ -71,8 +73,8 @@ export function UpdateFeed({
             />
           </svg>
         </div>
-        <h3 className="text-lg font-semibold text-foreground mb-1">
-          No updates found
+        <h3 className="text-lg font-semibold text-foreground mb-1 capitalize">
+          No {filter === 'all' ? 'updates' : filter + 's'} found
         </h3>
         <p className="text-sm text-muted-foreground max-w-sm">
           {searchQuery
