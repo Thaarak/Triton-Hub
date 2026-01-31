@@ -14,11 +14,13 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  LayoutDashboard,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const navItems = [
+  { icon: LayoutDashboard, label: "Home", href: "/home" },
   { icon: Megaphone, label: "Announcements", href: "/announcements" },
   { icon: FileText, label: "Exams", href: "/exams" },
   { icon: ClipboardList, label: "Assignments", href: "/assignments" },

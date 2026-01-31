@@ -51,7 +51,7 @@ export function CanvasIntegration() {
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [activeSubTab, setActiveSubTab] = useState<'classes' | 'grades' | 'assignments'>('classes');
+    const [activeSubTab, setActiveSubTab] = useState<'classes' | 'grades'>('classes');
 
     // Load from session storage
     useEffect(() => {
@@ -259,15 +259,6 @@ export function CanvasIntegration() {
                 >
                     <GraduationCap className="h-4 w-4" /> Grades
                 </button>
-                <button
-                    onClick={() => setActiveSubTab('assignments')}
-                    className={cn(
-                        "flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-md transition-all",
-                        activeSubTab === 'assignments' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                >
-                    <ClipboardList className="h-4 w-4" /> Assignments
-                </button>
             </div>
 
             {/* Content Area */}
@@ -343,36 +334,7 @@ export function CanvasIntegration() {
                     </div>
                 )}
 
-                {activeSubTab === 'assignments' && (
-                    <div className="space-y-4">
-                        {assignments ? (
-                            <div className="space-y-3">
-                                {assignments.map((a) => (
-                                    <div key={a.id} className="p-4 rounded-xl border border-border bg-card flex items-start justify-between gap-4">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                                                    {a.courseCode}
-                                                </span>
-                                                <h4 className="font-medium text-foreground">{a.name}</h4>
-                                            </div>
-                                            <p className="text-xs text-muted-foreground leading-relaxed">
-                                                Due: <span className="text-foreground font-medium">{formatDate(a.dueAt)}</span>
-                                                {a.pointsPossible && ` • ${a.pointsPossible} points`}
-                                            </p>
-                                        </div>
-                                        <a href={a.htmlUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-                                            <ExternalLink className="h-4 w-4" />
-                                        </a>
-                                    </div>
-                                ))}
-                                {assignments.length === 0 && <p className="text-center text-muted-foreground py-12">No upcoming unsubmitted assignments!</p>}
-                            </div>
-                        ) : (
-                            <EmptyState message="Sync your Canvas data to see your upcoming assignments." />
-                        )}
-                    </div>
-                )}
+
             </div>
         </div>
     );
