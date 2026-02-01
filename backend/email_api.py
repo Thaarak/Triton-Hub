@@ -15,8 +15,11 @@ load_dotenv()
 # Scopes required to read Gmail
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
-def get_gmail_service():
+def get_gmail_service(creds=None):
     """Shows basic usage of the Gmail API."""
+    if creds:
+        return build('gmail', 'v1', credentials=creds)
+    
     creds = None
     token_path = 'token.json'
     
@@ -63,15 +66,15 @@ def _get_header(headers, name):
             return h["value"]
     return ""
 
-def get_user_email():
+def get_user_email(creds=None):
     """Returns the email address of the authenticated user."""
-    service = get_gmail_service()
+    service = get_gmail_service(creds)
     profile = service.users().getProfile(userId='me').execute()
     return profile.get('emailAddress')
 
-def get_emails_last_month(max_results=50):
+def get_emails_last_month(max_results=50, creds=None):
     """Fetches emails from the last 30 days."""
-    service = get_gmail_service()
+    service = get_gmail_service(creds)
     today = datetime.date.today()
     last_month = today - datetime.timedelta(days=30)
     query = f"after:{last_month.strftime('%Y/%m/%d')}"
