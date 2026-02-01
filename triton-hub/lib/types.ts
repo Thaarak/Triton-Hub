@@ -29,6 +29,7 @@ export type Notification = {
   link: string;
   summary: string;
   user_id: string;
+  completed: boolean;
 };
 
 export type FilterType = "all" | "canvas" | "email" | "piazza" | "urgent" | "classes" | Category;

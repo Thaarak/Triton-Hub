@@ -2,10 +2,11 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from "date-fns";
-import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList, Calendar, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList, Calendar, Loader2, Check, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { fetchNotifications } from "@/lib/notifications";
+import { fetchNotifications, updateNotificationCompleted } from "@/lib/notifications";
+import { toast } from "sonner";
 import type { Notification } from "@/lib/types";
 import { AddEventModal } from "./add-event-modal";
 import {
@@ -101,12 +102,39 @@ function mapUrgency(urgency: string): Urgency {
 export function CalendarView() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingEvents, setUpdatingEvents] = useState<Set<number>>(new Set());
 
   // UI State
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [filterType, setFilterType] = useState<EventType | "all">("all");
   const [filterUrgency, setFilterUrgency] = useState<Urgency | "all">("all");
+
+  // Toggle event completion
+  const handleToggleComplete = useCallback(async (notificationId: number, currentCompleted: boolean) => {
+    setUpdatingEvents((prev) => new Set(prev).add(notificationId));
+    try {
+      await updateNotificationCompleted(notificationId, !currentCompleted);
+      // Update local state
+      setEvents((prev) =>
+        prev.map((event) =>
+          event.notificationId === notificationId
+            ? { ...event, completed: !currentCompleted }
+            : event
+        )
+      );
+      toast.success(currentCompleted ? "Event marked as incomplete" : "Event marked as done");
+    } catch (error) {
+      console.error("Failed to update event:", error);
+      toast.error("Failed to update event");
+    } finally {
+      setUpdatingEvents((prev) => {
+        const next = new Set(prev);
+        next.delete(notificationId);
+        return next;
+      });
+    }
+  }, []);
 
   // Load events function
   const loadEvents = useCallback(async () => {
@@ -127,6 +155,7 @@ export function CalendarView() {
 
         return {
           id: `notif-${notif.id}`,
+          notificationId: notif.id,
           title: notif.summary,
           description: notif.summary,
           date,
@@ -135,6 +164,7 @@ export function CalendarView() {
           urgency,
           course: notif.source,
           link: notif.link !== "EMPTY" ? notif.link : undefined,
+          completed: notif.completed ?? false,
         };
       });
 
@@ -177,7 +207,11 @@ export function CalendarView() {
     ? filteredEvents
       .filter((event) => isSameDay(event.date, selectedDate))
       .sort((a, b) => {
-        // Sort by urgency first (urgent > medium > low)
+        // Completed events go to the bottom
+        if (a.completed !== b.completed) {
+          return a.completed ? 1 : -1;
+        }
+        // Sort by urgency (urgent > medium > low)
         const urgencyOrder = { urgent: 0, medium: 1, low: 2 };
         return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
       })
@@ -325,7 +359,8 @@ export function CalendarView() {
                         className={cn(
                           "text-xs px-1.5 py-0.5 rounded truncate border-l-2",
                           eventTypeColors[event.type].bg,
-                          eventTypeColors[event.type].border
+                          eventTypeColors[event.type].border,
+                          event.completed && "opacity-50 line-through"
                         )}
                       >
                         <span className={cn("h-1.5 w-1.5 rounded-full inline-block mr-1", urgencyColors[event.urgency].dot)} />
@@ -393,35 +428,74 @@ export function CalendarView() {
             <div className="space-y-3 mt-4">
               {selectedDateEvents.map((event) => {
                 const Icon = eventTypeIcons[event.type];
+                const isUpdating = updatingEvents.has(event.notificationId);
                 return (
                   <div
                     key={event.id}
                     className={cn(
-                      "p-3 rounded-lg border-l-4",
+                      "p-3 rounded-lg border-l-4 transition-opacity",
                       eventTypeColors[event.type].bg,
-                      eventTypeColors[event.type].border
+                      eventTypeColors[event.type].border,
+                      event.completed && "opacity-60"
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleComplete(event.notificationId, event.completed)}
+                          disabled={isUpdating}
+                          className={cn(
+                            "h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                            event.completed
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "border-muted-foreground/50 hover:border-green-500"
+                          )}
+                        >
+                          {isUpdating ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : event.completed ? (
+                            <Check className="h-3 w-3" />
+                          ) : null}
+                        </button>
                         <Icon className={cn("h-4 w-4 shrink-0", eventTypeColors[event.type].text)} />
-                        <span className="font-medium text-sm">{event.title}</span>
+                        <span className={cn(
+                          "font-medium text-sm",
+                          event.completed && "line-through text-muted-foreground"
+                        )}>
+                          {event.title}
+                        </span>
                       </div>
                       <span className={cn("h-2 w-2 rounded-full shrink-0 mt-1.5", urgencyColors[event.urgency].dot)} />
                     </div>
                     {event.course && (
-                      <p className="text-xs text-muted-foreground mt-1 ml-6">{event.course}</p>
+                      <p className={cn(
+                        "text-xs text-muted-foreground mt-1 ml-12",
+                        event.completed && "line-through"
+                      )}>
+                        {event.course}
+                      </p>
                     )}
                     {event.startTime && (
-                      <p className="text-xs text-muted-foreground mt-1 ml-6">
+                      <p className={cn(
+                        "text-xs text-muted-foreground mt-1 ml-12",
+                        event.completed && "line-through"
+                      )}>
                         {event.startTime}
                         {event.endTime && ` - ${event.endTime}`}
                       </p>
                     )}
-                    <p className="text-xs text-muted-foreground mt-2 ml-6">
+                    <p className={cn(
+                      "text-xs text-muted-foreground mt-2 ml-12",
+                      event.completed && "line-through"
+                    )}>
                       {event.description}
                     </p>
-                    <div className="flex items-center gap-2 mt-2 ml-6">
+                    <div className="flex items-center gap-2 mt-2 ml-12">
+                      {event.completed && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+                          Done
+                        </span>
+                      )}
                       <span className={cn("text-xs px-1.5 py-0.5 rounded", urgencyColors[event.urgency].bg, urgencyColors[event.urgency].text)}>
                         {urgencyLabels[event.urgency]}
                       </span>

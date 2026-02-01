@@ -209,3 +209,33 @@ export async function createNotification(input: CreateNotificationInput): Promis
   console.log("Successfully created notification:", data);
   return data;
 }
+
+/**
+ * Update a notification's completed status.
+ * Returns the updated notification or throws an error.
+ */
+export async function updateNotificationCompleted(
+  notificationId: number,
+  completed: boolean
+): Promise<Notification> {
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be logged in to update an event");
+  }
+
+  const { data, error } = await supabase
+    .from("notifications")
+    .update({ completed })
+    .eq("id", notificationId)
+    .eq("user_id", session.user.id) // Ensure user can only update their own
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Supabase update error:", error);
+    throw new Error(`Failed to update event: ${error.message}`);
+  }
+
+  return data;
+}

@@ -3,6 +3,7 @@ export type Urgency = "urgent" | "medium" | "low";
 
 export type CalendarEvent = {
   id: string;
+  notificationId: number; // Original notification ID for updates
   title: string;
   description: string;
   date: Date;
@@ -12,6 +13,7 @@ export type CalendarEvent = {
   urgency: Urgency;
   course?: string;
   link?: string;
+  completed: boolean;
 };
 
 // Color mappings for event types
