@@ -22,7 +22,7 @@ CLIENT_CONFIG = {
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": ["http://localhost:5000/auth/google/callback"],
+        "redirect_uris": ["http://localhost:8080/auth/google/callback"],
     }
 }
 
@@ -88,5 +88,5 @@ def auth_google_callback():
 if __name__ == "__main__":
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
     print("Opening browser for Google sign-in...")
-    webbrowser.open("http://localhost:5000")
-    app.run(debug=False, port=5000)
+    webbrowser.open("http://localhost:8080")
+    app.run(host="localhost", debug=False, port=8080)
