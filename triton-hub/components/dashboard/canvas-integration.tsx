@@ -52,14 +52,25 @@ export function CanvasIntegration() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [activeSubTab, setActiveSubTab] = useState<'classes' | 'grades'>('classes');
+    const [showConfig, setShowConfig] = useState(true);
 
     // Load from session storage
     useEffect(() => {
         const storedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
         const storedUrl = sessionStorage.getItem(URL_STORAGE_KEY);
-        if (storedToken) setAccessToken(storedToken);
+        if (storedToken) {
+            setAccessToken(storedToken);
+            setShowConfig(false); // Hide config if token exists
+        }
         if (storedUrl) setCanvasUrl(storedUrl);
     }, []);
+
+    // Auto-fetch when token is present and config is hidden
+    useEffect(() => {
+        if (accessToken && !showConfig) {
+            fetchAllData();
+        }
+    }, [accessToken, showConfig]);
 
     // Save to session storage
     useEffect(() => {
@@ -194,44 +205,74 @@ export function CanvasIntegration() {
     return (
         <div className="space-y-6">
             {/* Configuration Section */}
-            <div className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-4">
-                <h3 className="font-semibold text-lg">Canvas Configuration</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">Canvas Link</label>
-                        <input
-                            type="text"
-                            className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="https://canvas.ucsd.edu"
-                            value={canvasUrl}
-                            onChange={(e) => setCanvasUrl(e.target.value)}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">Access Token</label>
-                        <input
-                            type="password"
-                            className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="Paste your token here..."
-                            value={accessToken}
-                            onChange={(e) => setAccessToken(e.target.value)}
-                        />
-                    </div>
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                    <p className="text-xs text-muted-foreground">
-                        Token can be found in Canvas Settings → Approved Integrations
-                    </p>
+            {/* Header / Config Toggle */}
+            <div className="flex items-center justify-between">
+                {!showConfig && (
                     <button
-                        onClick={fetchAllData}
-                        disabled={loading}
-                        className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:opacity-50"
+                        onClick={() => setShowConfig(true)}
+                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                     >
-                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {loading ? "Syncing..." : "Sync Canvas Data"}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
+                        Configure Canvas
                     </button>
-                </div>
+                )}
             </div>
+
+            {/* Configuration Section */}
+            {showConfig && (
+                <div className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-lg">Canvas Configuration</h3>
+                        {accessToken && (
+                            <button
+                                onClick={() => setShowConfig(false)}
+                                className="text-xs text-muted-foreground hover:text-foreground"
+                            >
+                                Hide
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Canvas Link</label>
+                            <input
+                                type="text"
+                                className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                placeholder="https://canvas.ucsd.edu"
+                                value={canvasUrl}
+                                onChange={(e) => setCanvasUrl(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Access Token</label>
+                            <input
+                                type="password"
+                                className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                placeholder="Paste your token here..."
+                                value={accessToken}
+                                onChange={(e) => setAccessToken(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-2">
+                        <p className="text-xs text-muted-foreground">
+                            Token can be found in Canvas Settings → Approved Integrations
+                        </p>
+                        <button
+                            onClick={() => {
+                                fetchAllData();
+                                setShowConfig(false);
+                            }}
+                            disabled={loading}
+                            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:opacity-50"
+                        >
+                            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {loading ? "Syncing..." : "Sync Canvas Data"}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {error && (
                 <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive font-medium">
