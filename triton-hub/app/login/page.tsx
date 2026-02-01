@@ -2,41 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { GraduationCap, Mail, Lock, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { GraduationCap, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
-    const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        email: "",
-        password: "",
-    });
-    const [error, setError] = useState<string | null>(null);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleGoogleLogin = () => {
         setIsLoading(true);
-        setError(null);
-
-        try {
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email: formData.email,
-                password: formData.password,
-            });
-
-            if (error) throw error;
-
-            router.push("/");
-        } catch (err: any) {
-            setError(err.message || "Invalid login credentials");
-        } finally {
-            setIsLoading(false);
-        }
+        window.location.href = "/api/flask/auth/google/login";
     };
 
     return (
@@ -69,93 +43,32 @@ export default function LoginPage() {
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-yellow-500 rounded-3xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200" />
 
                     <div className="relative w-full bg-[#001a3a]/80 backdrop-blur-2xl border border-white/5 rounded-3xl p-8 shadow-2xl">
-                        <form onSubmit={handleSubmit} className="space-y-5">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em] ml-1">
-                                    University Email
-                                </label>
-                                <div className="relative group/input">
-                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300/30 group-focus-within/input:text-blue-400 transition-colors" />
-                                    <Input
-                                        required
-                                        type="email"
-                                        placeholder="triton@ucsd.edu"
-                                        className="pl-12 bg-white/5 border-white/10 text-white placeholder:text-white/20 h-12 rounded-xl focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-                                        value={formData.email}
-                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <div className="flex justify-between items-center ml-1">
-                                    <label className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">
-                                        Password
-                                    </label>
-                                    <Link href="#" className="text-[10px] font-bold text-blue-200/40 hover:text-blue-400 uppercase tracking-wider transition-colors">
-                                        Forgot?
-                                    </Link>
-                                </div>
-                                <div className="relative group/input">
-                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300/30 group-focus-within/input:text-blue-400 transition-colors" />
-                                    <Input
-                                        required
-                                        type="password"
-                                        placeholder="••••••••"
-                                        className="pl-12 bg-white/5 border-white/10 text-white placeholder:text-white/20 h-12 rounded-xl focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-                                        value={formData.password}
-                                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            {error && (
-                                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center font-medium">
-                                    {error}
-                                </div>
-                            )}
-
-                            <Button
-                                type="submit"
-                                disabled={isLoading}
-                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold h-12 rounded-xl shadow-[0_8px_20px_rgba(37,99,235,0.3)] transition-all active:scale-[0.98] disabled:opacity-70 group"
-                            >
-                                {isLoading ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    <span className="flex items-center gap-2">
-                                        Enter Dashboard <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                    </span>
-                                )}
-                            </Button>
-
-                            <div className="relative flex py-2 items-center">
-                                <div className="flex-grow border-t border-white/10"></div>
-                                <span className="flex-shrink-0 mx-4 text-white/30 text-xs uppercase tracking-wider">Or</span>
-                                <div className="flex-grow border-t border-white/10"></div>
-                            </div>
-
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => window.location.href = "/api/flask/auth/google/login"}
-                                className="w-full bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold h-12 rounded-xl transition-all active:scale-[0.98]"
-                            >
-                                <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
-                                    <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
-                                </svg>
-                                Sign in with Google
-                            </Button>
-                        </form>
-
-                        <div className="mt-8 pt-6 border-t border-white/5 text-center">
-                            <p className="text-blue-200/40 text-xs font-medium tracking-wide">
-                                New to the Hub?{" "}
-                                <Link href="/signup" className="text-blue-400 hover:text-blue-300 font-bold ml-1 transition-colors">
-                                    Create Class Profile
-                                </Link>
-                            </p>
+                        <div className="text-center mb-6">
+                            <h2 className="text-xl font-bold text-white mb-2">Welcome Back</h2>
+                            <p className="text-blue-200/50 text-sm">Sign in with your Google account to continue</p>
                         </div>
+
+                        <Button
+                            type="button"
+                            onClick={handleGoogleLogin}
+                            disabled={isLoading}
+                            className="w-full bg-white hover:bg-gray-100 text-gray-900 font-bold h-12 rounded-xl shadow-lg transition-all active:scale-[0.98] disabled:opacity-70"
+                        >
+                            {isLoading ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <>
+                                    <svg className="mr-2 h-5 w-5" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
+                                        <path fill="#4285F4" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
+                                    </svg>
+                                    Sign in with Google
+                                </>
+                            )}
+                        </Button>
+
+                        <p className="text-center text-blue-200/30 text-xs mt-6">
+                            By signing in, you agree to our Terms of Service and Privacy Policy
+                        </p>
                     </div>
                 </div>
 

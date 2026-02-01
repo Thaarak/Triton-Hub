@@ -8,13 +8,23 @@ def _get_header(headers, name):
     return ""
 
 
-def fetch_emails_with_creds(creds, max_results=10):
+def fetch_emails_with_creds(creds, max_results=50):
+    """
+    Fetch emails from Gmail, excluding promotions and spam.
+    Uses PRIMARY category to get only important emails.
+    """
     service = build("gmail", "v1", credentials=creds)
 
+    # Fetch from PRIMARY category only (skips Promotions, Social, Updates, Forums, and Spam)
     results = (
         service.users()
         .messages()
-        .list(userId="me", labelIds=["INBOX"], maxResults=max_results)
+        .list(
+            userId="me", 
+            labelIds=["INBOX"],
+            q="category:primary -category:promotions -is:spam",  # Filter query
+            maxResults=max_results
+        )
         .execute()
     )
 

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dashboard } from "@/components/dashboard/dashboard";
 import { Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { getFlaskAuthStatus } from "@/lib/flask";
 
 export default function Home() {
@@ -14,16 +13,7 @@ export default function Home() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Check Supabase auth first
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        setUser(session.user);
-        setIsCheckingAuth(false);
-        return;
-      }
-
-      // If no Supabase session, check Flask/Google auth
+      // Check Flask/Google auth only (all auth via backend)
       const flaskAuth = await getFlaskAuthStatus();
       if (flaskAuth.authenticated && flaskAuth.user) {
         setUser(flaskAuth.user);

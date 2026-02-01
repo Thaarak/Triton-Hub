@@ -1,4 +1,5 @@
 import os
+import requests
 from flask import Blueprint, redirect, request, session, url_for, jsonify
 import google_auth_oauthlib.flow
 from google.oauth2.credentials import Credentials
@@ -78,7 +79,33 @@ def callback():
     user_info_service = build('oauth2', 'v2', credentials=credentials)
     user_info = user_info_service.userinfo().get().execute()
     session["user_info"] = user_info
-    return redirect(FRONTEND_URL)
+    
+    # Check if user has Canvas token in Supabase
+    supabase_url = os.getenv("SUPABASE_URL", "https://eorcjtcaxonmrohyrxnt.supabase.co")
+    supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY")
+    
+    try:
+        # Query Supabase for user profile using service key
+        headers = {
+            "apikey": supabase_service_key,
+            "Authorization": f"Bearer {supabase_service_key}"
+        }
+        response = requests.get(
+            f"{supabase_url}/rest/v1/profiles?email=eq.{user_info['email']}&select=canvas_token",
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            profiles = response.json()
+            # If user has canvas_token, store it in session
+            if profiles and profiles[0].get('canvas_token'):
+                session["canvas_token"] = profiles[0]['canvas_token']
+                session["canvas_url"] = "https://canvas.ucsd.edu"
+    except Exception as e:
+        print(f"Error checking Canvas token: {e}")
+    
+    # Always redirect to home
+    return redirect(f"{FRONTEND_URL}/home")
 
 @google_auth.route("/me")
 @google_auth.route("/me/")

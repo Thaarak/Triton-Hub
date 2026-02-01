@@ -8,7 +8,7 @@ import {
   Megaphone,
   FileText,
   ClipboardList,
-  CalendarDays,
+  Mail,
   Calendar,
   Settings,
   ChevronLeft,
@@ -17,14 +17,13 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Home", href: "/home" },
   { icon: Megaphone, label: "Announcements", href: "/announcements" },
   { icon: FileText, label: "Exams", href: "/exams" },
   { icon: ClipboardList, label: "Assignments", href: "/assignments" },
-  { icon: CalendarDays, label: "Events", href: "/events" },
+  { icon: Mail, label: "Email", href: "/email" },
   { icon: Calendar, label: "Calendar", href: "/calendar" },
   { icon: Settings, label: "Settings", href: "#" },
 ];
@@ -35,7 +34,11 @@ export function Sidebar() {
   const router = useRouter();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      await fetch('/api/flask/auth/google/logout', { credentials: 'include' });
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
     router.push("/login");
   };
 

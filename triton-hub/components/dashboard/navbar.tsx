@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
+import { getFlaskAuthStatus, FlaskUser } from "@/lib/flask";
 
 interface NavbarProps {
   searchQuery: string;
@@ -32,10 +33,17 @@ interface NavbarProps {
 export function Navbar({ searchQuery, onSearchChange }: NavbarProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<FlaskUser | null>(null);
 
-  useState(() => {
+  useEffect(() => {
     setMounted(true);
-  });
+    // Fetch user info from Flask backend
+    getFlaskAuthStatus().then((status) => {
+      if (status.authenticated && status.user) {
+        setUser(status.user);
+      }
+    });
+  }, []);
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
@@ -115,13 +123,13 @@ export function Navbar({ searchQuery, onSearchChange }: NavbarProps) {
                 className="flex items-center gap-2 pl-2 pr-1"
               >
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/avatar.png" alt="Student" />
+                  <AvatarImage src={user?.picture || "/avatar.png"} alt={user?.name || "Student"} />
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                    TC
+                    {user?.given_name?.charAt(0) || 'T'}{user?.family_name?.charAt(0) || 'C'}
                   </AvatarFallback>
                 </Avatar>
                 <span className="hidden text-sm font-medium md:block">
-                  Triton Student
+                  {user?.name || 'Triton Student'}
                 </span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
               </Button>

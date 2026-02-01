@@ -1,6 +1,22 @@
 
 const CANVAS_UCSD_URL = 'https://canvas.ucsd.edu';
 
+/**
+ * Fetch the Canvas token from the backend session
+ */
+export async function getCanvasToken(): Promise<string | null> {
+    try {
+        const response = await fetch('/api/flask/canvas/get-token', {
+            credentials: 'include'
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        return data.canvas_token || null;
+    } catch {
+        return null;
+    }
+}
+
 export async function syncCanvasData(accessToken: string, canvasUrl: string = CANVAS_UCSD_URL) {
     if (!accessToken) throw new Error('Access Token is required');
 

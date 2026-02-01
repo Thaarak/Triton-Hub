@@ -2,12 +2,11 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from "date-fns";
-import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList } from "lucide-react";
+import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { syncCanvasData } from "@/lib/canvas";
+import { getCanvasToken, syncCanvasData } from "@/lib/canvas";
 import {
-  mockCalendarEvents,
   eventTypeColors,
   urgencyColors,
   type CalendarEvent,
@@ -38,10 +37,10 @@ const urgencyLabels: Record<Urgency, string> = {
 };
 
 export function CalendarView() {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [canvasUrl, setCanvasUrl] = useState<string | null>(null);
-  const [events, setEvents] = useState<CalendarEvent[]>(mockCalendarEvents);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [hasToken, setHasToken] = useState<boolean | null>(null);
 
   // UI State
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -49,79 +48,76 @@ export function CalendarView() {
   const [filterType, setFilterType] = useState<EventType | "all">("all");
   const [filterUrgency, setFilterUrgency] = useState<Urgency | "all">("all");
 
-  // Load token
   useEffect(() => {
-    const storedToken = sessionStorage.getItem('canvas_token');
-    const storedUrl = sessionStorage.getItem('canvas_url');
-    setAccessToken(storedToken);
-    setCanvasUrl(storedUrl);
+    fetchCalendarData();
   }, []);
 
-  // Fetch data
-  useEffect(() => {
-    async function fetchData() {
-      if (!accessToken) {
+  const fetchCalendarData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Get token from backend session
+      const token = await getCanvasToken();
+      
+      if (!token) {
+        setHasToken(false);
         setLoading(false);
         return;
       }
+      
+      setHasToken(true);
 
-      try {
-        const { assignments, announcements } = await syncCanvasData(accessToken, canvasUrl || undefined);
+      const { assignments, announcements } = await syncCanvasData(token);
 
-        const newEvents: CalendarEvent[] = [];
+      const newEvents: CalendarEvent[] = [];
 
-        // Map Assignments
-        assignments.forEach((a: any) => {
-          if (!a.dueAt) return;
-          const dueDate = new Date(a.dueAt);
-          const isUrgent = dueDate.getTime() - Date.now() < 48 * 60 * 60 * 1000; // < 48 hours
+      // Map Assignments
+      assignments.forEach((a: any) => {
+        if (!a.dueAt) return;
+        const dueDate = new Date(a.dueAt);
+        const hoursUntilDue = (dueDate.getTime() - Date.now()) / (1000 * 60 * 60);
+        
+        let urgency: Urgency = 'low';
+        if (hoursUntilDue < 0) urgency = 'urgent'; // Overdue
+        else if (hoursUntilDue < 48) urgency = 'urgent';
+        else if (hoursUntilDue < 168) urgency = 'medium'; // < 1 week
 
-          newEvents.push({
-            id: `assign-${a.id}`,
-            title: a.name,
-            description: `Due: ${format(dueDate, 'h:mm a')}`,
-            date: dueDate,
-            startTime: format(dueDate, 'h:mm a'),
-            type: 'assignment',
-            urgency: isUrgent ? 'urgent' : 'medium',
-            course: a.courseCode
-          });
+        newEvents.push({
+          id: `assign-${a.id}`,
+          title: a.name,
+          description: `${a.pointsPossible ? `${a.pointsPossible} pts` : 'No points'} • ${a.courseName}`,
+          date: dueDate,
+          startTime: format(dueDate, 'h:mm a'),
+          type: 'assignment',
+          urgency,
+          course: a.courseCode
         });
+      });
 
-        // Map Announcements
-        announcements.forEach((a: any) => {
-          if (!a.postedAt) return;
-          const date = new Date(a.postedAt);
-          newEvents.push({
-            id: `ann-${a.id}`,
-            title: a.title,
-            description: a.message?.substring(0, 100) + '...',
-            date: date,
-            type: 'announcement',
-            urgency: 'low',
-            course: a.courseCode
-          });
+      // Map Announcements
+      announcements.forEach((a: any) => {
+        if (!a.postedAt) return;
+        const date = new Date(a.postedAt);
+        newEvents.push({
+          id: `ann-${a.id}`,
+          title: a.title,
+          description: a.message?.replace(/<[^>]*>/g, '').substring(0, 100) + '...',
+          date: date,
+          type: 'announcement',
+          urgency: 'low',
+          course: a.courseCode
         });
+      });
 
-        setEvents(newEvents);
-      } catch (e) {
-        console.error("Failed to fetch calendar data", e);
-        // Fallback to mock data or empty? Let's keep empty/mock if fail to avoid confusion.
-        // But if token exists, we probably shouldn't show mock data if fetch fails, showing error might be better.
-        // For now, let's just log and keep previous state (which initializes to mock) or set empty.
-        // To respect user request "include all assignments", best to show nothing if it fails so they know it failed?
-        // Actually, let's fallback to mockEvents if we want a "demo" mode, but user said "real data".
-        // I'll set it to empty if real fetch fails to be safe, or maybe just toast.
-      } finally {
-        setLoading(false);
-      }
+      setEvents(newEvents);
+    } catch (e: any) {
+      console.error("Failed to fetch calendar data", e);
+      setError(e.message || 'Failed to load calendar data');
+    } finally {
+      setLoading(false);
     }
-
-    if (accessToken) {
-      fetchData();
-    }
-  }, [accessToken, canvasUrl]);
-
+  };
 
   const days = useMemo(() => {
     const start = startOfMonth(currentMonth);
@@ -129,7 +125,6 @@ export function CalendarView() {
     return eachDayOfInterval({ start, end });
   }, [currentMonth]);
 
-  // Get the day of week for the first day (0 = Sunday)
   const startDayOfWeek = startOfMonth(currentMonth).getDay();
 
   const filteredEvents = useMemo(() => {
@@ -148,11 +143,41 @@ export function CalendarView() {
     ? filteredEvents
       .filter((event) => isSameDay(event.date, selectedDate))
       .sort((a, b) => {
-        // Sort by urgency first (urgent > medium > low)
         const urgencyOrder = { urgent: 0, medium: 1, low: 2 };
         return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
       })
     : [];
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+        <p className="text-sm text-muted-foreground">Loading calendar...</p>
+      </div>
+    );
+  }
+
+  if (hasToken === false) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-border rounded-xl p-6 text-center">
+        <h3 className="text-lg font-semibold">Canvas Not Connected</h3>
+        <p className="text-muted-foreground mt-2 mb-4">
+          Please log in to connect your Canvas account.
+        </p>
+        <a href="/login" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90">
+          Go to Login
+        </a>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive font-medium">
+        Error: {error}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col lg:flex-row gap-6">
@@ -187,6 +212,14 @@ export function CalendarView() {
               onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
             >
               <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={fetchCalendarData}
+              disabled={loading}
+            >
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             </Button>
           </div>
         </div>

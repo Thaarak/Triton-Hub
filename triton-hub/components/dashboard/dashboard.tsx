@@ -11,8 +11,7 @@ import { CourseList } from "./course-list";
 import { format } from "date-fns";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
-import { syncCanvasData } from "@/lib/canvas";
+import { syncCanvasData, getCanvasToken } from "@/lib/canvas";
 import { toast } from "sonner";
 
 import { getFlaskEmails, getFlaskAuthStatus } from "@/lib/flask";
@@ -44,23 +43,15 @@ export function Dashboard() {
     const initSync = async () => {
       setIsLoading(true);
       try {
-        // 1. Supabase/Canvas Sync
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('canvas_token')
-            .eq('id', session.user.id)
-            .single();
-
-          if (profile?.canvas_token) {
-            try {
-              const data = await syncCanvasData(profile.canvas_token);
-              setCanvasData(data);
-            } catch (syncError) {
-              console.error("Sync failed:", syncError);
-              toast.error("Failed to sync with Canvas");
-            }
+        // 1. Canvas Sync via Flask backend token
+        const canvasToken = await getCanvasToken();
+        if (canvasToken) {
+          try {
+            const data = await syncCanvasData(canvasToken);
+            setCanvasData(data);
+          } catch (syncError) {
+            console.error("Sync failed:", syncError);
+            toast.error("Failed to sync with Canvas");
           }
         }
 

@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, ExternalLink, GraduationCap, ClipboardList, BookOpen } from "lucide-react";
+import { Loader2, ExternalLink, GraduationCap, BookOpen, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { saveCanvasToken } from "@/lib/flask";
 
 interface ClassItem {
     id: number;
@@ -38,65 +37,50 @@ interface AssignmentItem {
     htmlUrl: string;
 }
 
-const TOKEN_STORAGE_KEY = 'canvas_token';
-const URL_STORAGE_KEY = 'canvas_url';
-const CANVAS_UCSD_URL = 'https://canvas.ucsd.edu';
-
 export function CanvasIntegration() {
-    const [accessToken, setAccessToken] = useState('');
-    const [canvasUrl, setCanvasUrl] = useState(CANVAS_UCSD_URL);
-
     const [classes, setClasses] = useState<ClassItem[] | null>(null);
     const [grades, setGrades] = useState<CourseGrade[] | null>(null);
     const [assignments, setAssignments] = useState<AssignmentItem[] | null>(null);
 
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeSubTab, setActiveSubTab] = useState<'classes' | 'grades'>('classes');
 
-    // Load from session storage
+    // Auto-fetch on mount using token from backend session
     useEffect(() => {
-        const storedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
-        const storedUrl = sessionStorage.getItem(URL_STORAGE_KEY);
-        if (storedToken) setAccessToken(storedToken);
-        if (storedUrl) setCanvasUrl(storedUrl);
+        fetchCanvasData();
     }, []);
 
-    // Save to session storage
-    useEffect(() => {
-        if (accessToken) sessionStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
-        if (canvasUrl) sessionStorage.setItem(URL_STORAGE_KEY, canvasUrl);
-    }, [accessToken, canvasUrl]);
-
-    const headers = () => ({
-        Authorization: `Bearer ${accessToken}`,
-    });
-
-    const getApiBase = () => {
-        const normalized = canvasUrl.replace(/\/$/, '');
-        const isUcsd = normalized === CANVAS_UCSD_URL || normalized.includes('canvas.ucsd.edu');
-        // Use proxy in development for UCSD to avoid CORS
-        if (isUcsd && process.env.NODE_ENV === 'development') {
-            return '/canvas-api';
-        }
-        return normalized;
-    };
-
-    const fetchAllData = async () => {
-        if (!accessToken || !canvasUrl) {
-            setError('Please provide both Canvas URL and Access Token.');
-            return;
-        }
-
+    const fetchCanvasData = async () => {
         setLoading(true);
         setError(null);
 
         try {
-            const base = getApiBase();
+            // First get the canvas token from backend session
+            const tokenResponse = await fetch('/api/flask/canvas/get-token', {
+                credentials: 'include'
+            });
+
+            if (!tokenResponse.ok) {
+                throw new Error('Canvas not configured. Please log in again.');
+            }
+
+            const tokenData = await tokenResponse.json();
+            const accessToken = tokenData.canvas_token;
+
+            if (!accessToken) {
+                throw new Error('No Canvas token found. Please set up Canvas from login.');
+            }
+
+            const headers = {
+                Authorization: `Bearer ${accessToken}`,
+            };
+
+            const base = '/canvas-api';
 
             // 1. Fetch Classes (and determine common term)
             const coursesRes = await fetch(`${base}/api/v1/courses?enrollment_type=student&enrollment_state=active&include[]=teachers&include[]=term&include[]=total_scores&per_page=50`, {
-                headers: headers()
+                headers
             });
             if (!coursesRes.ok) throw new Error(`Canvas API error: ${coursesRes.status}`);
             const coursesJson = await coursesRes.json();
@@ -147,7 +131,7 @@ export function CanvasIntegration() {
             // 2. Fetch Assignments for these courses
             const assignmentPromises = filteredCourses.map(async (course: any) => {
                 const res = await fetch(`${base}/api/v1/courses/${course.id}/assignments?include[]=submission&per_page=50&order_by=due_at`, {
-                    headers: headers()
+                    headers
                 });
                 if (!res.ok) return [];
                 const assigns = await res.json();
@@ -175,15 +159,6 @@ export function CanvasIntegration() {
             });
             setAssignments(allAssigns.filter(a => !a.submittedAt)); // Show only upcoming/unsubmitted
 
-            // Also send to our Flask backend
-            try {
-                await saveCanvasToken(accessToken, canvasUrl);
-            } catch (saveError) {
-                console.error("Failed to save token to Flask:", saveError);
-                // We don't necessarily want to fail the whole sync if this fails, 
-                // but it's good to know.
-            }
-
         } catch (err: any) {
             setError(err.message || 'Failed to sync with Canvas');
         } finally {
@@ -191,56 +166,38 @@ export function CanvasIntegration() {
         }
     };
 
-    const formatDate = (dateStr: string | null) => {
-        if (!dateStr) return 'No due date';
-        return new Date(dateStr).toLocaleDateString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    };
-
     return (
         <div className="space-y-6">
-            {/* Configuration Section */}
-            <div className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-4">
-                <h3 className="font-semibold text-lg">Canvas Configuration</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">Canvas Link</label>
-                        <input
-                            type="text"
-                            className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="https://canvas.ucsd.edu"
-                            value={canvasUrl}
-                            onChange={(e) => setCanvasUrl(e.target.value)}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">Access Token</label>
-                        <input
-                            type="password"
-                            className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="Paste your token here..."
-                            value={accessToken}
-                            onChange={(e) => setAccessToken(e.target.value)}
-                        />
-                    </div>
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                    <p className="text-xs text-muted-foreground">
-                        Token can be found in Canvas Settings → Approved Integrations
-                    </p>
+            {/* Header with refresh button */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 bg-muted p-1 rounded-lg w-fit">
                     <button
-                        onClick={fetchAllData}
-                        disabled={loading}
-                        className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:opacity-50"
+                        onClick={() => setActiveSubTab('classes')}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-md transition-all",
+                            activeSubTab === 'classes' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        )}
                     >
-                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {loading ? "Syncing..." : "Sync Canvas Data"}
+                        <BookOpen className="h-4 w-4" /> Classes
+                    </button>
+                    <button
+                        onClick={() => setActiveSubTab('grades')}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-md transition-all",
+                            activeSubTab === 'grades' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        <GraduationCap className="h-4 w-4" /> Grades
                     </button>
                 </div>
+                <button
+                    onClick={fetchCanvasData}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50"
+                >
+                    <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                    {loading ? "Syncing..." : "Refresh"}
+                </button>
             </div>
 
             {error && (
@@ -249,102 +206,87 @@ export function CanvasIntegration() {
                 </div>
             )}
 
-            {/* Navigation Sub-Tabs */}
-            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg w-fit">
-                <button
-                    onClick={() => setActiveSubTab('classes')}
-                    className={cn(
-                        "flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-md transition-all",
-                        activeSubTab === 'classes' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                >
-                    <BookOpen className="h-4 w-4" /> Classes
-                </button>
-                <button
-                    onClick={() => setActiveSubTab('grades')}
-                    className={cn(
-                        "flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-md transition-all",
-                        activeSubTab === 'grades' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                >
-                    <GraduationCap className="h-4 w-4" /> Grades
-                </button>
-            </div>
-
             {/* Content Area */}
             <div className="min-h-[300px]">
-                {activeSubTab === 'classes' && (
-                    <div className="space-y-4">
-                        {classes ? (
-                            <div className="grid grid-cols-1 gap-4">
-                                {classes.map((cls) => (
-                                    <div key={cls.id} className="p-4 rounded-xl border border-border bg-card hover:border-primary/50 transition-colors flex items-center justify-between group">
-                                        <div>
-                                            <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">{cls.name}</h4>
-                                            <p className="text-sm text-muted-foreground">{cls.courseCode} • {cls.professor ?? 'Unknown Professor'}</p>
-                                        </div>
-                                        <div className="text-xs font-medium px-2 py-1 rounded bg-secondary text-secondary-foreground">
-                                            {cls.term}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <EmptyState message="Sync your Canvas data to see your classes." />
-                        )}
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-border rounded-xl">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-2" />
+                        <p className="text-muted-foreground text-sm">Loading Canvas data...</p>
                     </div>
-                )}
-
-                {activeSubTab === 'grades' && (
-                    <div className="space-y-4">
-                        {grades ? (
-                            <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-muted text-muted-foreground font-medium">
-                                        <tr>
-                                            <th className="px-6 py-3">Course</th>
-                                            <th className="px-6 py-3">Current Score</th>
-                                            <th className="px-6 py-3">Current Grade</th>
-                                            <th className="px-6 py-3 text-right">Link</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border">
-                                        {grades.map((g) => (
-                                            <tr key={g.id} className="hover:bg-muted/50 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <div className="font-medium text-foreground">{g.name}</div>
-                                                    <div className="text-xs text-muted-foreground">{g.courseCode}</div>
-                                                </td>
-                                                <td className="px-6 py-4 font-mono font-medium">
-                                                    {g.currentScore != null ? `${g.currentScore}%` : '—'}
-                                                </td>
-                                                <td className="px-6 py-4 font-medium">
-                                                    <span className={cn(
-                                                        "px-2 py-1 rounded text-xs",
-                                                        g.currentGrade ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                                                    )}>
-                                                        {g.currentGrade ?? 'N/A'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    {g.gradesUrl && (
-                                                        <a href={g.gradesUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary inline-flex items-center gap-1">
-                                                            Canvas <ExternalLink className="h-3 w-3" />
-                                                        </a>
-                                                    )}
-                                                </td>
-                                            </tr>
+                ) : (
+                    <>
+                        {activeSubTab === 'classes' && (
+                            <div className="space-y-4">
+                                {classes && classes.length > 0 ? (
+                                    <div className="grid grid-cols-1 gap-4">
+                                        {classes.map((cls) => (
+                                            <div key={cls.id} className="p-4 rounded-xl border border-border bg-card hover:border-primary/50 transition-colors flex items-center justify-between group">
+                                                <div>
+                                                    <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">{cls.name}</h4>
+                                                    <p className="text-sm text-muted-foreground">{cls.courseCode} • {cls.professor ?? 'Unknown Professor'}</p>
+                                                </div>
+                                                <div className="text-xs font-medium px-2 py-1 rounded bg-secondary text-secondary-foreground">
+                                                    {cls.term}
+                                                </div>
+                                            </div>
                                         ))}
-                                    </tbody>
-                                </table>
+                                    </div>
+                                ) : (
+                                    <EmptyState message="No classes found." />
+                                )}
                             </div>
-                        ) : (
-                            <EmptyState message="Sync your Canvas data to see your grades." />
                         )}
-                    </div>
+
+                        {activeSubTab === 'grades' && (
+                            <div className="space-y-4">
+                                {grades && grades.length > 0 ? (
+                                    <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-muted text-muted-foreground font-medium">
+                                                <tr>
+                                                    <th className="px-6 py-3">Course</th>
+                                                    <th className="px-6 py-3">Current Score</th>
+                                                    <th className="px-6 py-3">Current Grade</th>
+                                                    <th className="px-6 py-3 text-right">Link</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border">
+                                                {grades.map((g) => (
+                                                    <tr key={g.id} className="hover:bg-muted/50 transition-colors">
+                                                        <td className="px-6 py-4">
+                                                            <div className="font-medium text-foreground">{g.name}</div>
+                                                            <div className="text-xs text-muted-foreground">{g.courseCode}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 font-mono font-medium">
+                                                            {g.currentScore != null ? `${g.currentScore}%` : '—'}
+                                                        </td>
+                                                        <td className="px-6 py-4 font-medium">
+                                                            <span className={cn(
+                                                                "px-2 py-1 rounded text-xs",
+                                                                g.currentGrade ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                                                            )}>
+                                                                {g.currentGrade ?? 'N/A'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            {g.gradesUrl && (
+                                                                <a href={g.gradesUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary inline-flex items-center gap-1">
+                                                                    Canvas <ExternalLink className="h-3 w-3" />
+                                                                </a>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <EmptyState message="No grades found." />
+                                )}
+                            </div>
+                        )}
+                    </>
                 )}
-
-
             </div>
         </div>
     );
