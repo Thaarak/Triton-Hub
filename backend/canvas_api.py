@@ -18,9 +18,21 @@ def fetch_canvas_info(user_id):
         if "WI26" not in course.name:
             continue
 
+        enrollments = course.get_enrollments(type=["StudentEnrollment"], user_id="self")
+        current_grade = None
+        for enrollment in enrollments:
+            grades = enrollment.grades
+            current_grade = {
+                "current_score": grades.get("current_score"),
+                "current_grade": grades.get("current_grade"),
+                "final_score": grades.get("final_score"),
+                "final_grade": grades.get("final_grade"),
+            }
+
         course_data = {
             "id": course.id,
             "name": course.name,
+            "grades": current_grade,
             "assignments": [],
             "announcements": [],
         }
