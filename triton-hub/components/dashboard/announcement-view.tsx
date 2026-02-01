@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Loader2, Megaphone, ExternalLink } from "lucide-react";
 import { fetchNotifications } from "@/lib/notifications";
-import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import type { Notification } from "@/lib/types";
 
@@ -21,7 +20,6 @@ export function AnnouncementView() {
     const [announcements, setAnnouncements] = useState<AnnouncementItem[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
     useEffect(() => {
         const loadAnnouncements = async () => {
@@ -29,14 +27,6 @@ export function AnnouncementView() {
             setError(null);
 
             try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session) {
-                    setIsAuthenticated(false);
-                    setLoading(false);
-                    return;
-                }
-                setIsAuthenticated(true);
-
                 const notifications = await fetchNotifications();
 
                 // Filter for announcements only
@@ -83,20 +73,6 @@ export function AnnouncementView() {
         return (
             <div className="flex h-64 items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
-
-    if (isAuthenticated === false) {
-        return (
-            <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-border rounded-xl p-6 text-center">
-                <h3 className="text-lg font-semibold">Not Signed In</h3>
-                <p className="text-muted-foreground mt-2 mb-4">
-                    Please sign in to view your announcements.
-                </p>
-                <a href="/login" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90">
-                    Sign In
-                </a>
             </div>
         );
     }

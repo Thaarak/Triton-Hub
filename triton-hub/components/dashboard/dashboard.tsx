@@ -11,8 +11,8 @@ import { CourseList } from "./course-list";
 import { format } from "date-fns";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
 import { fetchAndTransformNotifications } from "@/lib/notifications";
+import { isAuthenticated } from "@/lib/auth";
 import { toast } from "sonner";
 
 export function Dashboard() {
@@ -33,10 +33,12 @@ export function Dashboard() {
     const loadNotifications = async () => {
       setIsLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const authenticated = await isAuthenticated();
+        if (!authenticated) {
+          setIsLoading(false);
+          return;
+        }
 
-        // Fetch notifications from Supabase
         const notificationUpdates = await fetchAndTransformNotifications();
         setUpdates(notificationUpdates);
 

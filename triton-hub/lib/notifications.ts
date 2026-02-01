@@ -1,28 +1,45 @@
 import { supabase } from "./supabase";
 import type { Update, Category, Notification } from "./types";
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+
 /**
- * Fetch notifications for the current authenticated user from Supabase.
- * RLS policies ensure users only see their own notifications.
+ * Fetch notifications for the current authenticated user.
+ * Uses Supabase session when signed in with email/password, or backend session token when signed in with Google OAuth.
  */
 export async function fetchNotifications(): Promise<Notification[]> {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    return [];
+  if (session) {
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching notifications:", error);
+      throw error;
+    }
+    return data || [];
   }
 
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("*")
-    .eq("user_id", session.user.id)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching notifications:", error);
-    throw error;
+  // Google OAuth: no Supabase session; use backend session token
+  const backendToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("triton_session_token") : null;
+  if (backendToken) {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/profile/notifications`, {
+        headers: { Authorization: `Bearer ${backendToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      }
+    } catch (e) {
+      console.error("Error fetching notifications from backend:", e);
+    }
   }
 
-  return data || [];
+  return [];
 }
 
 /**

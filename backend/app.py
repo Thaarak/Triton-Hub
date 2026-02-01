@@ -3,16 +3,20 @@ import os
 from flask import Flask
 from dotenv import load_dotenv
 
+from flask_cors import CORS
 from routes.google_auth import google_auth
 from routes.emails import emails
+from routes.profile import profile
 
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app) # Enable CORS for frontend communication
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
 
 app.register_blueprint(google_auth)
 app.register_blueprint(emails)
+app.register_blueprint(profile)
 
 
 @app.route("/")
