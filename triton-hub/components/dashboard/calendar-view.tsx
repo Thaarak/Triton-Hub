@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { syncCanvasData } from "@/lib/canvas";
 import {
-  mockCalendarEvents,
   eventTypeColors,
   urgencyColors,
   type CalendarEvent,
@@ -40,7 +39,7 @@ const urgencyLabels: Record<Urgency, string> = {
 export function CalendarView() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [canvasUrl, setCanvasUrl] = useState<string | null>(null);
-  const [events, setEvents] = useState<CalendarEvent[]>(mockCalendarEvents);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   // UI State
@@ -171,16 +170,7 @@ export function CalendarView() {
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setCurrentMonth(new Date());
-                setSelectedDate(new Date());
-              }}
-            >
-              Today
-            </Button>
+
             <Button
               variant="ghost"
               size="icon"
