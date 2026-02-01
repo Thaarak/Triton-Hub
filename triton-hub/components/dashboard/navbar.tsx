@@ -94,18 +94,7 @@ export function Navbar({ searchQuery, onSearchChange }: NavbarProps) {
             <span className="sr-only">Toggle theme</span>
           </Button>
 
-          {/* Notifications */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative text-muted-foreground hover:text-foreground"
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[10px] font-bold text-amber-950">
-              6
-            </span>
-            <span className="sr-only">Notifications</span>
-          </Button>
+
 
           {/* Profile Dropdown */}
           <DropdownMenu>
