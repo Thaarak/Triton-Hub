@@ -1,8 +1,11 @@
 import os
 
-from flask import Blueprint, redirect, request, session, url_for
+from flask import Blueprint, redirect, request, session, url_for, jsonify
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
+from googleapiclient.discovery import build
+
+from db import get_user_by_email, create_user
 
 google_auth = Blueprint("google_auth", __name__, url_prefix="/auth/google")
 
@@ -12,11 +15,15 @@ CLIENT_CONFIG = {
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": ["http://localhost:5000/auth/google/callback"],
+        "redirect_uris": ["http://localhost:8080/auth/google/callback"],
     }
 }
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+]
 
 
 @google_auth.route("/")
@@ -56,6 +63,25 @@ def callback():
         "scopes": list(credentials.scopes),
     }
 
-    # TODO: Link Google account to the logged-in user in the database
-    # TODO: Redirect to frontend dashboard instead of /emails
+    # Fetch the user's Google profile (name + email)
+    people_service = build("people", "v1", credentials=credentials)
+    profile = people_service.people().get(
+        resourceName="people/me",
+        personFields="names,emailAddresses",
+    ).execute()
+
+    email = profile["emailAddresses"][0]["value"]
+    full_name = profile["names"][0]["displayName"]
+
+    # Check if user already exists in the database
+    existing_user = get_user_by_email(email)
+
+    if existing_user:
+        # Returning user — store their info in session
+        session["user"] = existing_user
+    else:
+        # New user — create them in the database
+        new_user = create_user(email=email, full_name=full_name)
+        session["user"] = new_user
+
     return redirect(url_for("emails.get_emails"))
