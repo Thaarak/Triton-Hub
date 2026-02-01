@@ -11,12 +11,6 @@ import sys
 import os
 import argparse
 from datetime import datetime
-from dotenv import load_dotenv
-
-# Load environment variables from the root .env
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env'))
-# Also try the local .env
-load_dotenv()
 from email_api import get_emails_last_month
 from parse_notifications import call_llm, parse_llm_output, upload_to_supabase
 
@@ -148,7 +142,6 @@ def main():
     parser.add_argument("--limit", type=int, default=50, help="Max emails to fetch")
     parser.add_argument("--reauth", action="store_true", help="Force re-authentication (switch account)")
     parser.add_argument("--skip-canvas", action="store_true", help="Skip Canvas integration")
-    parser.add_argument("--user-id", type=str, help="Supabase user ID for RLS compliance")
     args = parser.parse_args()
 
     # Handle Re-authentication
@@ -161,59 +154,14 @@ def main():
 
     all_notifications = []
     
-    # 1. Fetch Emails and Identify User
+    # 1. Fetch Emails
     print(f"Fetching up to {args.limit} emails from the last 30 days...")
     try:
-        from email_api import get_user_email
-        user_email = get_user_email()
-        print(f"Authenticated as: {user_email}")
-        
-        # Auto-detect user_id by email lookup
-        user_id = args.user_id
-        if not user_id:
-            from supabase import create_client
-            url = os.environ.get("SUPABASE_URL")
-            key = os.environ.get("SUPABASE_KEY")
-            
-            if not url or not key:
-                print("Error: SUPABASE_URL or SUPABASE_KEY missing from .env")
-                sys.exit(1)
-                
-            supabase = create_client(url, key)
-            # Try to find the user in the profiles table (case-insensitive)
-            try:
-                # Use ilike for case-insensitive matching in Supabase
-                res = supabase.table("profiles").select("id").ilike("email", user_email).execute()
-                if res.data and len(res.data) > 0:
-                    user_id = res.data[0]["id"]
-                    print(f"✅ Auto-detected User ID for {user_email}: {user_id}")
-                else:
-                    # Fallback check
-                    res = supabase.table("profiles").select("id, email").execute()
-                    found = False
-                    for row in res.data:
-                        if row['email'].lower() == user_email.lower():
-                            user_id = row['id']
-                            print(f"✅ Auto-detected User ID for {user_email}: {user_id}")
-                            found = True
-                            break
-                    
-                    if not found:
-                        print(f"❌ Error: Could not find a profile for {user_email} in Supabase.")
-                        print("CHECKLIST:")
-                        print("1. Go to Supabase -> Settings -> API.")
-                        print("2. Copy the 'service_role' key (the secret one).")
-                        print("3. Paste it into your .env as SUPABASE_KEY.")
-                        sys.exit(1)
-            except Exception as e:
-                print(f"❌ Database error while looking up profile: {e}")
-                print("TIP: You likely need to use the 'service_role' key from Supabase settings to bypass RLS.")
-                sys.exit(1)
-
         emails = get_emails_last_month(max_results=args.limit)
         print(f"Fetched {len(emails)} emails.")
     except Exception as e:
-        print(f"Error during initialization/fetch: {e}")
+        print(f"Error fetching emails: {e}")
+        print("Ensure 'credentials.json' is present and you have authenticated.")
         sys.exit(1)
 
     if emails:
@@ -249,8 +197,7 @@ def main():
             for notif in all_notifications:
                 print(f"  - {notif}")
         else:
-            # Pass detected user_id to upload function
-            upload_to_supabase(all_notifications, user_id=user_id)
+            upload_to_supabase(all_notifications)
     else:
         print("No notifications to upload.")
 

@@ -1,14 +1,11 @@
 import os
-import sys
-import uuid
-from flask import Blueprint, redirect, request, session, url_for
-from itsdangerous import URLSafeTimedSerializer
-import google_auth_oauthlib.flow
-from supabase import create_client
 
-# Add parent directory to path to import sync modules
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from sync_service import perform_full_sync
+from flask import Blueprint, redirect, request, session, url_for, jsonify
+import google.oauth2.credentials
+import google_auth_oauthlib.flow
+from googleapiclient.discovery import build
+
+from db import get_user_by_email, create_user
 
 google_auth = Blueprint("google_auth", __name__, url_prefix="/auth/google")
 
@@ -18,16 +15,16 @@ CLIENT_CONFIG = {
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": [os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/auth/google/callback")],
+        "redirect_uris": ["http://localhost:8080/auth/google/callback"],
     }
 }
 
 SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly", 
-    "https://www.googleapis.com/auth/userinfo.email", 
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
-    "openid"
 ]
+
 
 @google_auth.route("/")
 def authorize():
@@ -180,14 +177,25 @@ def callback():
         print("❌ AUTH FLOW FAILED: No user ID identified.")
         return redirect(f"{base_f}/login?error=auth_failed")
 
-    # Profile found in Supabase → dashboard with token so frontend can load profile; else → setup for Canvas token
-    if profile_found:
-        secret = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key")
-        serializer = URLSafeTimedSerializer(secret, salt="oauth-redirect")
-        one_time_token = serializer.dumps({"user_id": uid, "email": session.get("user_email", "")})
-        redirect_url = f"{base_f}/home?t={one_time_token}"
-        print(f"⭐ Profile found: Sending {user_email} to Dashboard with token.")
-        return redirect(redirect_url)
+    # Fetch the user's Google profile (name + email)
+    people_service = build("people", "v1", credentials=credentials)
+    profile = people_service.people().get(
+        resourceName="people/me",
+        personFields="names,emailAddresses",
+    ).execute()
+
+    email = profile["emailAddresses"][0]["value"]
+    full_name = profile["names"][0]["displayName"]
+
+    # Check if user already exists in the database
+    existing_user = get_user_by_email(email)
+
+    if existing_user:
+        # Returning user — store their info in session
+        session["user"] = existing_user
     else:
-        print(f"📝 New/updated profile: Sending {user_email} to Setup for Canvas token.")
-        return redirect(f"{base_f}/setup?user_id={uid}")
+        # New user — create them in the database
+        new_user = create_user(email=email, full_name=full_name)
+        session["user"] = new_user
+
+    return redirect(url_for("emails.get_emails"))
