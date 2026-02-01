@@ -34,6 +34,11 @@ export function Sidebar() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem("triton_session_token");
+      sessionStorage.removeItem("canvas_token");
+      sessionStorage.removeItem("canvas_url");
+    }
     router.push("/login");
   };
 

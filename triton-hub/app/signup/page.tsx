@@ -17,7 +17,6 @@ export default function SignUpPage() {
         email: "",
         password: "",
         confirmPassword: "",
-        canvasToken: "",
     });
     const [error, setError] = useState<string | null>(null);
     const [passwordStrength, setPasswordStrength] = useState(0);
@@ -48,17 +47,15 @@ export default function SignUpPage() {
                 email: formData.email,
                 password: formData.password,
                 options: {
-                    data: {
-                        full_name: formData.name,
-                        canvas_token: formData.canvasToken,
-                    },
+                    data: { full_name: formData.name },
                 },
             });
 
             if (error) throw error;
+            if (!data.user?.id) throw new Error("Account created but no user id returned");
 
-            // Successful signup
-            router.push("/");
+            // Step 2: redirect to setup to add Canvas token
+            router.push(`/setup?user_id=${encodeURIComponent(data.user.id)}`);
         } catch (err: any) {
             setError(err.message || "Something went wrong");
         } finally {
@@ -184,24 +181,11 @@ export default function SignUpPage() {
                                         )}
                                     </div>
                                 </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em] ml-1">
-                                        Canvas Token
-                                    </label>
-                                    <div className="relative group/input">
-                                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300/30 group-focus-within/input:text-blue-400 transition-colors" />
-                                        <Input
-                                            required
-                                            type="text"
-                                            placeholder="Paste your token here"
-                                            className="pl-12 bg-white/5 border-white/10 text-white placeholder:text-white/20 h-12 rounded-xl focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-                                            value={formData.canvasToken}
-                                            onChange={(e) => setFormData({ ...formData, canvasToken: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
                             </div>
+
+                            <p className="text-[10px] text-blue-200/50 text-center -mt-1">
+                                Next step: you&apos;ll add your Canvas token, then sign in with Google.
+                            </p>
 
                             {error && (
                                 <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center font-medium">

@@ -6,6 +6,8 @@ import { Dashboard } from "@/components/dashboard/dashboard";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+
 export default function Home() {
   const router = useRouter();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -13,11 +15,26 @@ export default function Home() {
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/login");
-      } else {
+      if (session) {
         setIsCheckingAuth(false);
+        return;
       }
+      // Google OAuth users: no Supabase session, but may have backend session token
+      const backendToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("triton_session_token") : null;
+      if (backendToken) {
+        try {
+          const res = await fetch(`${BACKEND_URL}/api/profile/me`, {
+            headers: { Authorization: `Bearer ${backendToken}` },
+          });
+          if (res.ok) {
+            setIsCheckingAuth(false);
+            return;
+          }
+        } catch {
+          // token invalid or network error
+        }
+      }
+      router.push("/login");
     };
     checkAuth();
   }, [router]);
