@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Flask session files (contain sensitive tokens)
+.flask_session/
+flask_backend/.flask_session/
+
 # vercel
 .vercel
 
