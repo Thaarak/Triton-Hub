@@ -43,6 +43,7 @@ const urgencyLabels: Record<Urgency, string> = {
 
 /**
  * Parse event_date and event_time into a Date object
+ * Uses local timezone to avoid date shifting issues
  */
 function parseNotificationDate(eventDate: string, eventTime: string, createdAt: string): Date {
   if (!eventDate || eventDate === "EMPTY") {
@@ -50,11 +51,15 @@ function parseNotificationDate(eventDate: string, eventTime: string, createdAt: 
   }
 
   try {
+    // Parse date parts to create date in local timezone (not UTC)
+    const [year, month, day] = eventDate.split("-").map(Number);
+
     if (!eventTime || eventTime === "EMPTY") {
-      return new Date(eventDate);
+      // Create date at noon local time to avoid any timezone edge cases
+      return new Date(year, month - 1, day, 12, 0, 0);
     }
 
-    // Parse time like "11:59 PM PST"
+    // Parse time like "11:59 PM" or "11:59 PM PST"
     const timeMatch = eventTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
     if (timeMatch) {
       let hours = parseInt(timeMatch[1], 10);
@@ -64,12 +69,11 @@ function parseNotificationDate(eventDate: string, eventTime: string, createdAt: 
       if (period === "PM" && hours !== 12) hours += 12;
       if (period === "AM" && hours === 12) hours = 0;
 
-      const date = new Date(eventDate);
-      date.setHours(hours, minutes, 0, 0);
-      return date;
+      return new Date(year, month - 1, day, hours, minutes, 0);
     }
 
-    return new Date(eventDate);
+    // Fallback: create date at noon local time
+    return new Date(year, month - 1, day, 12, 0, 0);
   } catch {
     return new Date(createdAt);
   }

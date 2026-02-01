@@ -44,6 +44,7 @@ export async function fetchNotifications(): Promise<Notification[]> {
 
 /**
  * Parse event_date and event_time from notifications table into a Date object.
+ * Uses local timezone to avoid date shifting issues.
  * Returns null if the date is "EMPTY" or invalid.
  */
 function parseEventDateTime(eventDate: string, eventTime: string): Date | null {
@@ -52,13 +53,15 @@ function parseEventDateTime(eventDate: string, eventTime: string): Date | null {
   }
 
   try {
-    // eventDate format: "2026-01-31"
-    // eventTime format: "11:59 PM PST" or "EMPTY"
+    // Parse date parts to create date in local timezone (not UTC)
+    const [year, month, day] = eventDate.split("-").map(Number);
+
     if (!eventTime || eventTime === "EMPTY") {
-      return new Date(eventDate);
+      // Create date at noon local time to avoid any timezone edge cases
+      return new Date(year, month - 1, day, 12, 0, 0);
     }
 
-    // Parse time like "11:59 PM PST"
+    // Parse time like "11:59 PM" or "11:59 PM PST"
     const timeMatch = eventTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
     if (timeMatch) {
       let hours = parseInt(timeMatch[1], 10);
@@ -68,12 +71,11 @@ function parseEventDateTime(eventDate: string, eventTime: string): Date | null {
       if (period === "PM" && hours !== 12) hours += 12;
       if (period === "AM" && hours === 12) hours = 0;
 
-      const date = new Date(eventDate);
-      date.setHours(hours, minutes, 0, 0);
-      return date;
+      return new Date(year, month - 1, day, hours, minutes, 0);
     }
 
-    return new Date(eventDate);
+    // Fallback: create date at noon local time
+    return new Date(year, month - 1, day, 12, 0, 0);
   } catch {
     return null;
   }
