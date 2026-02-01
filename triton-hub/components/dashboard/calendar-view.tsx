@@ -2,10 +2,11 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from "date-fns";
-import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList } from "lucide-react";
+import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { syncCanvasData } from "@/lib/canvas";
+import { fetchNotifications } from "@/lib/notifications";
+import type { Notification } from "@/lib/types";
 import {
   eventTypeColors,
   urgencyColors,
@@ -18,16 +19,18 @@ const eventTypeIcons: Record<EventType, typeof Megaphone> = {
   announcement: Megaphone,
   personal: User,
   exam: FileText,
-  class: GraduationCap,
+  event: Calendar,
   assignment: ClipboardList,
+  grade: GraduationCap,
 };
 
 const eventTypeLabels: Record<EventType, string> = {
   announcement: "Announcement",
-  personal: "Personal Event",
+  personal: "Personal",
   exam: "Exam",
-  class: "Class",
+  event: "Event",
   assignment: "Assignment",
+  grade: "Grade",
 };
 
 const urgencyLabels: Record<Urgency, string> = {
@@ -36,9 +39,65 @@ const urgencyLabels: Record<Urgency, string> = {
   low: "Low",
 };
 
+/**
+ * Parse event_date and event_time into a Date object
+ */
+function parseNotificationDate(eventDate: string, eventTime: string, createdAt: string): Date {
+  if (!eventDate || eventDate === "EMPTY") {
+    return new Date(createdAt);
+  }
+
+  try {
+    if (!eventTime || eventTime === "EMPTY") {
+      return new Date(eventDate);
+    }
+
+    // Parse time like "11:59 PM PST"
+    const timeMatch = eventTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1], 10);
+      const minutes = parseInt(timeMatch[2], 10);
+      const period = timeMatch[3].toUpperCase();
+
+      if (period === "PM" && hours !== 12) hours += 12;
+      if (period === "AM" && hours === 12) hours = 0;
+
+      const date = new Date(eventDate);
+      date.setHours(hours, minutes, 0, 0);
+      return date;
+    }
+
+    return new Date(eventDate);
+  } catch {
+    return new Date(createdAt);
+  }
+}
+
+/**
+ * Map notification category to calendar EventType
+ */
+function mapCategoryToEventType(category: string): EventType {
+  const mapping: Record<string, EventType> = {
+    announcement: "announcement",
+    assignment: "assignment",
+    exam: "exam",
+    event: "event",
+    personal: "personal",
+    grade: "grade",
+  };
+  return mapping[category] || "event";
+}
+
+/**
+ * Map notification urgency to calendar Urgency
+ */
+function mapUrgency(urgency: string): Urgency {
+  if (urgency === "high") return "urgent";
+  if (urgency === "medium") return "medium";
+  return "low";
+}
+
 export function CalendarView() {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [canvasUrl, setCanvasUrl] = useState<string | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,78 +107,47 @@ export function CalendarView() {
   const [filterType, setFilterType] = useState<EventType | "all">("all");
   const [filterUrgency, setFilterUrgency] = useState<Urgency | "all">("all");
 
-  // Load token
+  // Fetch notifications from Supabase
   useEffect(() => {
-    const storedToken = sessionStorage.getItem('canvas_token');
-    const storedUrl = sessionStorage.getItem('canvas_url');
-    setAccessToken(storedToken);
-    setCanvasUrl(storedUrl);
-  }, []);
-
-  // Fetch data
-  useEffect(() => {
-    async function fetchData() {
-      if (!accessToken) {
-        setLoading(false);
-        return;
-      }
-
+    async function loadEvents() {
+      setLoading(true);
       try {
-        const { assignments, announcements } = await syncCanvasData(accessToken, canvasUrl || undefined);
+        const notifications = await fetchNotifications();
 
-        const newEvents: CalendarEvent[] = [];
+        const calendarEvents: CalendarEvent[] = notifications.map((notif: Notification) => {
+          const date = parseNotificationDate(notif.event_date, notif.event_time, notif.created_at);
+          const eventType = mapCategoryToEventType(notif.category);
+          const urgency = mapUrgency(notif.urgency);
 
-        // Map Assignments
-        assignments.forEach((a: any) => {
-          if (!a.dueAt) return;
-          const dueDate = new Date(a.dueAt);
-          const isUrgent = dueDate.getTime() - Date.now() < 48 * 60 * 60 * 1000; // < 48 hours
+          // Extract time string for display
+          let startTime: string | undefined;
+          if (notif.event_time && notif.event_time !== "EMPTY") {
+            startTime = notif.event_time.replace(/\s*(PST|PDT|EST|EDT|CST|CDT|MST|MDT)$/i, "").trim();
+          }
 
-          newEvents.push({
-            id: `assign-${a.id}`,
-            title: a.name,
-            description: `Due: ${format(dueDate, 'h:mm a')}`,
-            date: dueDate,
-            startTime: format(dueDate, 'h:mm a'),
-            type: 'assignment',
-            urgency: isUrgent ? 'urgent' : 'medium',
-            course: a.courseCode
-          });
+          return {
+            id: `notif-${notif.id}`,
+            title: notif.summary,
+            description: notif.summary,
+            date,
+            startTime,
+            type: eventType,
+            urgency,
+            course: notif.source,
+            link: notif.link !== "EMPTY" ? notif.link : undefined,
+          };
         });
 
-        // Map Announcements
-        announcements.forEach((a: any) => {
-          if (!a.postedAt) return;
-          const date = new Date(a.postedAt);
-          newEvents.push({
-            id: `ann-${a.id}`,
-            title: a.title,
-            description: a.message?.substring(0, 100) + '...',
-            date: date,
-            type: 'announcement',
-            urgency: 'low',
-            course: a.courseCode
-          });
-        });
-
-        setEvents(newEvents);
-      } catch (e) {
-        console.error("Failed to fetch calendar data", e);
-        // Fallback to mock data or empty? Let's keep empty/mock if fail to avoid confusion.
-        // But if token exists, we probably shouldn't show mock data if fetch fails, showing error might be better.
-        // For now, let's just log and keep previous state (which initializes to mock) or set empty.
-        // To respect user request "include all assignments", best to show nothing if it fails so they know it failed?
-        // Actually, let's fallback to mockEvents if we want a "demo" mode, but user said "real data".
-        // I'll set it to empty if real fetch fails to be safe, or maybe just toast.
+        setEvents(calendarEvents);
+      } catch (error) {
+        console.error("Failed to fetch calendar events:", error);
       } finally {
         setLoading(false);
       }
     }
 
-    if (accessToken) {
-      fetchData();
-    }
-  }, [accessToken, canvasUrl]);
+    loadEvents();
+  }, []);
 
 
   const days = useMemo(() => {

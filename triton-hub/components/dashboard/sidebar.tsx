@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Megaphone,
-  FileText,
   ClipboardList,
   CalendarDays,
   Calendar,
@@ -22,7 +21,6 @@ import { supabase } from "@/lib/supabase";
 const navItems = [
   { icon: LayoutDashboard, label: "Home", href: "/home" },
   { icon: Megaphone, label: "Announcements", href: "/announcements" },
-  { icon: FileText, label: "Exams", href: "/exams" },
   { icon: ClipboardList, label: "Assignments", href: "/assignments" },
   { icon: CalendarDays, label: "Events", href: "/events" },
   { icon: Calendar, label: "Calendar", href: "/calendar" },
