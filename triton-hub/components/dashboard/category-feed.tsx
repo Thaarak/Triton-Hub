@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
-import { mockUpdates } from "@/lib/mock-data";
+import { useState, useCallback, useEffect } from "react";
+import { fetchAndTransformNotifications } from "@/lib/notifications";
 import type { Update, Category } from "@/lib/types";
 import { Navbar } from "./navbar";
 import { Sidebar } from "./sidebar";
 import { UpdateCard } from "./update-card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2 } from "lucide-react";
-import { format } from "date-fns";
 
 interface CategoryFeedProps {
   category: Category;
@@ -17,11 +16,26 @@ interface CategoryFeedProps {
 }
 
 export function CategoryFeed({ category, title, description }: CategoryFeedProps) {
-  const [updates, setUpdates] = useState<Update[]>(
-    mockUpdates.filter((u) => u.category === category)
-  );
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [updates, setUpdates] = useState<Update[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadNotifications = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const allUpdates = await fetchAndTransformNotifications();
+      // Filter by category, mapping "personal" to "event" as done in notifications.ts
+      const filtered = allUpdates.filter((u) => u.category === category);
+      setUpdates(filtered);
+    } catch (error) {
+      console.error("Failed to load notifications:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [category]);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
 
   const handleMarkRead = useCallback((id: string) => {
     setUpdates((prev) =>
@@ -32,28 +46,14 @@ export function CategoryFeed({ category, title, description }: CategoryFeedProps
   }, []);
 
   const handleRefresh = useCallback(() => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1500);
-  }, []);
-
-  const filteredUpdates = useMemo(() => {
-    if (!searchQuery) return updates;
-    const query = searchQuery.toLowerCase();
-    return updates.filter(
-      (update) =>
-        update.title.toLowerCase().includes(query) ||
-        update.snippet.toLowerCase().includes(query) ||
-        update.course?.toLowerCase().includes(query)
-    );
-  }, [updates, searchQuery]);
+    loadNotifications();
+  }, [loadNotifications]);
 
   const unreadCount = updates.filter((u) => u.unread).length;
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+      <Navbar />
       <Sidebar />
 
       <main className="pt-16 pb-20 sm:pb-0 sm:pl-56 transition-all duration-300">
@@ -92,7 +92,7 @@ export function CategoryFeed({ category, title, description }: CategoryFeedProps
               <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
               <p className="text-muted-foreground">Loading...</p>
             </div>
-          ) : filteredUpdates.length === 0 ? (
+          ) : updates.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="h-16 w-16 rounded-full bg-secondary flex items-center justify-center mb-4">
                 <svg
@@ -113,14 +113,12 @@ export function CategoryFeed({ category, title, description }: CategoryFeedProps
                 No {title.toLowerCase()} found
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
-                {searchQuery
-                  ? `No results for "${searchQuery}". Try a different search term.`
-                  : `You're all caught up! No ${title.toLowerCase()} at the moment.`}
+                You're all caught up! No {title.toLowerCase()} at the moment.
               </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredUpdates.map((update) => (
+              {updates.map((update) => (
                 <UpdateCard
                   key={update.id}
                   update={update}

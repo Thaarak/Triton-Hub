@@ -4,9 +4,17 @@ API_URL = "https://canvas.ucsd.edu"
 
 
 def get_api_key(user_id):
-    # TODO: Fetch the user's Canvas API key from the database
-    # placeholder until database is implemented
-    return "13171~7Ye69ZMn7fKG4eLHeDwF2BHe7ACFYfUm2rPkTUwTuzx8HeGVLVx3wDTtB3vx6xEG"
+    """Fetch the user's Canvas API key from the database."""
+    import os
+    from supabase import create_client
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase = create_client(supabase_url, supabase_key)
+    
+    res = supabase.table("profiles").select("canvas_token").eq("id", user_id).execute()
+    if res.data and len(res.data) > 0:
+        return res.data[0].get("canvas_token")
+    return None
 
 
 def fetch_canvas_info(user_id):

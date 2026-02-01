@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from "date-fns";
-import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList } from "lucide-react";
+import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList, Calendar, Loader2, Check, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { syncCanvasData } from "@/lib/canvas";
+import { fetchNotifications, updateNotificationCompleted } from "@/lib/notifications";
+import { toast } from "sonner";
+import type { Notification } from "@/lib/types";
+import { AddEventModal } from "./add-event-modal";
 import {
   eventTypeColors,
   urgencyColors,
@@ -18,16 +21,18 @@ const eventTypeIcons: Record<EventType, typeof Megaphone> = {
   announcement: Megaphone,
   personal: User,
   exam: FileText,
-  class: GraduationCap,
+  event: Calendar,
   assignment: ClipboardList,
+  grade: GraduationCap,
 };
 
 const eventTypeLabels: Record<EventType, string> = {
   announcement: "Announcement",
-  personal: "Personal Event",
+  personal: "Personal",
   exam: "Exam",
-  class: "Class",
+  event: "Event",
   assignment: "Assignment",
+  grade: "Grade",
 };
 
 const urgencyLabels: Record<Urgency, string> = {
@@ -36,11 +41,72 @@ const urgencyLabels: Record<Urgency, string> = {
   low: "Low",
 };
 
+/**
+ * Parse event_date and event_time into a Date object
+ * Uses local timezone to avoid date shifting issues
+ */
+function parseNotificationDate(eventDate: string, eventTime: string, createdAt: string): Date {
+  if (!eventDate || eventDate === "EMPTY") {
+    return new Date(createdAt);
+  }
+
+  try {
+    // Parse date parts to create date in local timezone (not UTC)
+    const [year, month, day] = eventDate.split("-").map(Number);
+
+    if (!eventTime || eventTime === "EMPTY") {
+      // Create date at noon local time to avoid any timezone edge cases
+      return new Date(year, month - 1, day, 12, 0, 0);
+    }
+
+    // Parse time like "11:59 PM" or "11:59 PM PST"
+    const timeMatch = eventTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1], 10);
+      const minutes = parseInt(timeMatch[2], 10);
+      const period = timeMatch[3].toUpperCase();
+
+      if (period === "PM" && hours !== 12) hours += 12;
+      if (period === "AM" && hours === 12) hours = 0;
+
+      return new Date(year, month - 1, day, hours, minutes, 0);
+    }
+
+    // Fallback: create date at noon local time
+    return new Date(year, month - 1, day, 12, 0, 0);
+  } catch {
+    return new Date(createdAt);
+  }
+}
+
+/**
+ * Map notification category to calendar EventType
+ */
+function mapCategoryToEventType(category: string): EventType {
+  const mapping: Record<string, EventType> = {
+    announcement: "announcement",
+    assignment: "assignment",
+    exam: "exam",
+    event: "event",
+    personal: "personal",
+    grade: "grade",
+  };
+  return mapping[category] || "event";
+}
+
+/**
+ * Map notification urgency to calendar Urgency
+ */
+function mapUrgency(urgency: string): Urgency {
+  if (urgency === "high") return "urgent";
+  if (urgency === "medium") return "medium";
+  return "low";
+}
+
 export function CalendarView() {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [canvasUrl, setCanvasUrl] = useState<string | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingEvents, setUpdatingEvents] = useState<Set<number>>(new Set());
 
   // UI State
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -48,78 +114,76 @@ export function CalendarView() {
   const [filterType, setFilterType] = useState<EventType | "all">("all");
   const [filterUrgency, setFilterUrgency] = useState<Urgency | "all">("all");
 
-  // Load token
-  useEffect(() => {
-    const storedToken = sessionStorage.getItem('canvas_token');
-    const storedUrl = sessionStorage.getItem('canvas_url');
-    setAccessToken(storedToken);
-    setCanvasUrl(storedUrl);
+  // Toggle event completion
+  const handleToggleComplete = useCallback(async (notificationId: number, currentCompleted: boolean) => {
+    setUpdatingEvents((prev) => new Set(prev).add(notificationId));
+    try {
+      await updateNotificationCompleted(notificationId, !currentCompleted);
+      // Update local state
+      setEvents((prev) =>
+        prev.map((event) =>
+          event.notificationId === notificationId
+            ? { ...event, completed: !currentCompleted }
+            : event
+        )
+      );
+      toast.success(currentCompleted ? "Event marked as incomplete" : "Event marked as done");
+    } catch (error) {
+      console.error("Failed to update event:", error);
+      toast.error("Failed to update event");
+    } finally {
+      setUpdatingEvents((prev) => {
+        const next = new Set(prev);
+        next.delete(notificationId);
+        return next;
+      });
+    }
   }, []);
 
-  // Fetch data
+  // Load events function
+  const loadEvents = useCallback(async () => {
+    setLoading(true);
+    try {
+      const notifications = await fetchNotifications();
+
+      const calendarEvents: CalendarEvent[] = notifications.map((notif: Notification) => {
+        const date = parseNotificationDate(notif.event_date, notif.event_time, notif.created_at);
+        const eventType = mapCategoryToEventType(notif.category);
+        const urgency = mapUrgency(notif.urgency);
+
+        // Extract time string for display
+        let startTime: string | undefined;
+        if (notif.event_time && notif.event_time !== "EMPTY") {
+          startTime = notif.event_time.replace(/\s*(PST|PDT|EST|EDT|CST|CDT|MST|MDT)$/i, "").trim();
+        }
+
+        return {
+          id: `notif-${notif.id}`,
+          notificationId: notif.id,
+          title: notif.summary,
+          description: notif.summary,
+          date,
+          startTime,
+          type: eventType,
+          urgency,
+          course: notif.source,
+          link: notif.link !== "EMPTY" ? notif.link : undefined,
+          completed: notif.completed ?? false,
+        };
+      });
+
+      setEvents(calendarEvents);
+    } catch (error) {
+      console.error("Failed to fetch calendar events:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch notifications from Supabase on mount
   useEffect(() => {
-    async function fetchData() {
-      if (!accessToken) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const { assignments, announcements } = await syncCanvasData(accessToken, canvasUrl || undefined);
-
-        const newEvents: CalendarEvent[] = [];
-
-        // Map Assignments
-        assignments.forEach((a: any) => {
-          if (!a.dueAt) return;
-          const dueDate = new Date(a.dueAt);
-          const isUrgent = dueDate.getTime() - Date.now() < 48 * 60 * 60 * 1000; // < 48 hours
-
-          newEvents.push({
-            id: `assign-${a.id}`,
-            title: a.name,
-            description: `Due: ${format(dueDate, 'h:mm a')}`,
-            date: dueDate,
-            startTime: format(dueDate, 'h:mm a'),
-            type: 'assignment',
-            urgency: isUrgent ? 'urgent' : 'medium',
-            course: a.courseCode
-          });
-        });
-
-        // Map Announcements
-        announcements.forEach((a: any) => {
-          if (!a.postedAt) return;
-          const date = new Date(a.postedAt);
-          newEvents.push({
-            id: `ann-${a.id}`,
-            title: a.title,
-            description: a.message?.substring(0, 100) + '...',
-            date: date,
-            type: 'announcement',
-            urgency: 'low',
-            course: a.courseCode
-          });
-        });
-
-        setEvents(newEvents);
-      } catch (e) {
-        console.error("Failed to fetch calendar data", e);
-        // Fallback to mock data or empty? Let's keep empty/mock if fail to avoid confusion.
-        // But if token exists, we probably shouldn't show mock data if fetch fails, showing error might be better.
-        // For now, let's just log and keep previous state (which initializes to mock) or set empty.
-        // To respect user request "include all assignments", best to show nothing if it fails so they know it failed?
-        // Actually, let's fallback to mockEvents if we want a "demo" mode, but user said "real data".
-        // I'll set it to empty if real fetch fails to be safe, or maybe just toast.
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    if (accessToken) {
-      fetchData();
-    }
-  }, [accessToken, canvasUrl]);
+    loadEvents();
+  }, [loadEvents]);
 
 
   const days = useMemo(() => {
@@ -147,7 +211,11 @@ export function CalendarView() {
     ? filteredEvents
       .filter((event) => isSameDay(event.date, selectedDate))
       .sort((a, b) => {
-        // Sort by urgency first (urgent > medium > low)
+        // Completed events go to the bottom
+        if (a.completed !== b.completed) {
+          return a.completed ? 1 : -1;
+        }
+        // Sort by urgency (urgent > medium > low)
         const urgencyOrder = { urgent: 0, medium: 1, low: 2 };
         return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
       })
@@ -163,6 +231,7 @@ export function CalendarView() {
             {format(currentMonth, "MMMM yyyy")}
           </h2>
           <div className="flex items-center gap-2">
+            <AddEventModal onEventAdded={loadEvents} selectedDate={selectedDate} />
             <Button
               variant="ghost"
               size="icon"
@@ -294,7 +363,8 @@ export function CalendarView() {
                         className={cn(
                           "text-xs px-1.5 py-0.5 rounded truncate border-l-2",
                           eventTypeColors[event.type].bg,
-                          eventTypeColors[event.type].border
+                          eventTypeColors[event.type].border,
+                          event.completed && "opacity-50 line-through"
                         )}
                       >
                         <span className={cn("h-1.5 w-1.5 rounded-full inline-block mr-1", urgencyColors[event.urgency].dot)} />
@@ -362,35 +432,74 @@ export function CalendarView() {
             <div className="space-y-3 mt-4">
               {selectedDateEvents.map((event) => {
                 const Icon = eventTypeIcons[event.type];
+                const isUpdating = updatingEvents.has(event.notificationId);
                 return (
                   <div
                     key={event.id}
                     className={cn(
-                      "p-3 rounded-lg border-l-4",
+                      "p-3 rounded-lg border-l-4 transition-opacity",
                       eventTypeColors[event.type].bg,
-                      eventTypeColors[event.type].border
+                      eventTypeColors[event.type].border,
+                      event.completed && "opacity-60"
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleComplete(event.notificationId, event.completed)}
+                          disabled={isUpdating}
+                          className={cn(
+                            "h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                            event.completed
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "border-muted-foreground/50 hover:border-green-500"
+                          )}
+                        >
+                          {isUpdating ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : event.completed ? (
+                            <Check className="h-3 w-3" />
+                          ) : null}
+                        </button>
                         <Icon className={cn("h-4 w-4 shrink-0", eventTypeColors[event.type].text)} />
-                        <span className="font-medium text-sm">{event.title}</span>
+                        <span className={cn(
+                          "font-medium text-sm",
+                          event.completed && "line-through text-muted-foreground"
+                        )}>
+                          {event.title}
+                        </span>
                       </div>
                       <span className={cn("h-2 w-2 rounded-full shrink-0 mt-1.5", urgencyColors[event.urgency].dot)} />
                     </div>
                     {event.course && (
-                      <p className="text-xs text-muted-foreground mt-1 ml-6">{event.course}</p>
+                      <p className={cn(
+                        "text-xs text-muted-foreground mt-1 ml-12",
+                        event.completed && "line-through"
+                      )}>
+                        {event.course}
+                      </p>
                     )}
                     {event.startTime && (
-                      <p className="text-xs text-muted-foreground mt-1 ml-6">
+                      <p className={cn(
+                        "text-xs text-muted-foreground mt-1 ml-12",
+                        event.completed && "line-through"
+                      )}>
                         {event.startTime}
                         {event.endTime && ` - ${event.endTime}`}
                       </p>
                     )}
-                    <p className="text-xs text-muted-foreground mt-2 ml-6">
+                    <p className={cn(
+                      "text-xs text-muted-foreground mt-2 ml-12",
+                      event.completed && "line-through"
+                    )}>
                       {event.description}
                     </p>
-                    <div className="flex items-center gap-2 mt-2 ml-6">
+                    <div className="flex items-center gap-2 mt-2 ml-12">
+                      {event.completed && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+                          Done
+                        </span>
+                      )}
                       <span className={cn("text-xs px-1.5 py-0.5 rounded", urgencyColors[event.urgency].bg, urgencyColors[event.urgency].text)}>
                         {urgencyLabels[event.urgency]}
                       </span>
