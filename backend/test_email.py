@@ -22,7 +22,7 @@ CLIENT_CONFIG = {
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": ["http://localhost:5000/oauth2callback"],
+        "redirect_uris": ["http://localhost:5000/auth/google/callback"],
     }
 }
 
@@ -31,15 +31,15 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 @app.route("/")
 def index():
-    return redirect(url_for("authorize"))
+    return redirect(url_for("auth_google"))
 
 
-@app.route("/authorize")
-def authorize():
+@app.route("/auth/google")
+def auth_google():
     flow = google_auth_oauthlib.flow.Flow.from_client_config(
         CLIENT_CONFIG, scopes=SCOPES
     )
-    flow.redirect_uri = url_for("oauth2callback", _external=True)
+    flow.redirect_uri = url_for("auth_google_callback", _external=True)
     authorization_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -49,12 +49,12 @@ def authorize():
     return redirect(authorization_url)
 
 
-@app.route("/oauth2callback")
-def oauth2callback():
+@app.route("/auth/google/callback")
+def auth_google_callback():
     flow = google_auth_oauthlib.flow.Flow.from_client_config(
         CLIENT_CONFIG, scopes=SCOPES, state=session.get("state")
     )
-    flow.redirect_uri = url_for("oauth2callback", _external=True)
+    flow.redirect_uri = url_for("auth_google_callback", _external=True)
     flow.fetch_token(authorization_response=request.url)
 
     credentials = flow.credentials
