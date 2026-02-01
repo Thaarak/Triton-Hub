@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from routes.google_auth import google_auth
 from routes.emails import emails
+from routes.user import user
 
 load_dotenv()
 
@@ -13,6 +14,7 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
 
 app.register_blueprint(google_auth)
 app.register_blueprint(emails)
+app.register_blueprint(user)
 
 
 @app.route("/")
