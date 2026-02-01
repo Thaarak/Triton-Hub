@@ -8,11 +8,13 @@ google_auth = Blueprint("google_auth", __name__)
 
 PORT = 5328
 # Base URL for the Flask backend itself (used for internal redirects)
+# Using 127.0.0.1 instead of localhost for Google OAuth compatibility
 BACKEND_URL = f"http://127.0.0.1:{PORT}"
 # Base URL for the frontend (used for the redirect URI that the browser sees)
-FRONTEND_URL = "http://localhost"
-# Callback URL through the Next.js proxy
-REDIRECT_URI = f"{FRONTEND_URL}/api/flask/auth/google/callback"
+FRONTEND_URL = "http://127.0.0.1:3000"
+# Callback URL that Google should redirect to. 
+# This should match what's in the Google Cloud Console "Authorized redirect URIs"
+REDIRECT_URI = f"{BACKEND_URL}/api/auth/google/callback"
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -76,7 +78,7 @@ def callback():
     user_info_service = build('oauth2', 'v2', credentials=credentials)
     user_info = user_info_service.userinfo().get().execute()
     session["user_info"] = user_info
-    return redirect("http://localhost:3000/")
+    return redirect(FRONTEND_URL)
 
 @google_auth.route("/me")
 @google_auth.route("/me/")
@@ -84,3 +86,10 @@ def me():
     if "user_info" not in session:
         return jsonify({"authenticated": False}), 401
     return jsonify({"authenticated": True, "user": session["user_info"]})
+
+@google_auth.route("/logout")
+@google_auth.route("/logout/")
+def logout():
+    """Clear the session and log out the user"""
+    session.clear()
+    return jsonify({"message": "Logged out successfully", "authenticated": False})

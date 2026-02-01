@@ -20,7 +20,7 @@ CORS(app, supports_credentials=True)
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 # REGISTER BLUEPRINTS
-# These match the Next.js rewrite: /api/flask/:path* -> localhost:80/api/:path*
+# These match the Next.js rewrite: /api/flask/:path* -> localhost:3000/api/:path*
 app.register_blueprint(google_auth, url_prefix="/api/auth/google")
 app.register_blueprint(canvas_auth, url_prefix="/api/auth/canvas")
 app.register_blueprint(emails, url_prefix="/api/emails")

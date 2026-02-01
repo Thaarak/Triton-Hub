@@ -138,7 +138,7 @@ export default function LoginPage() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => window.location.href = "/api/flask/auth/google"}
+                                onClick={() => window.location.href = "/api/flask/auth/google/login"}
                                 className="w-full bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold h-12 rounded-xl transition-all active:scale-[0.98]"
                             >
                                 <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">

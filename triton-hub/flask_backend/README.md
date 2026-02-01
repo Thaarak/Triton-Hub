@@ -30,7 +30,7 @@ Run the application:
 python app.py
 ```
 
-The server will start at `http://localhost:80`.
+The server will start at `http://localhost:5328`.
 
 ## API Routes
 

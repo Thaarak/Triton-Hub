@@ -21,7 +21,7 @@ export interface FlaskAuthStatus {
 
 /**
  * Checks the authentication status of the user on the Flask backend.
- * Uses the proxy defined in next.config.ts (/api/flask -> localhost:80/api)
+ * Uses the proxy defined in next.config.ts (/api/flask -> localhost:3000/api)
  */
 export async function getFlaskAuthStatus(): Promise<FlaskAuthStatus> {
     try {
@@ -35,6 +35,24 @@ export async function getFlaskAuthStatus(): Promise<FlaskAuthStatus> {
     } catch (error) {
         console.error('Error fetching Flask auth status:', error);
         return { authenticated: false };
+    }
+}
+
+/**
+ * Logs out the user from the Flask backend (clears Google auth session).
+ */
+export async function logoutFlaskAuth(): Promise<boolean> {
+    try {
+        const response = await fetch('/api/flask/auth/google/logout', {
+            credentials: 'include'
+        });
+        if (!response.ok) {
+            return false;
+        }
+        return true;
+    } catch (error) {
+        console.error('Error logging out from Flask:', error);
+        return false;
     }
 }
 
