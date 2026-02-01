@@ -7,7 +7,7 @@ import { CalendarView } from "@/components/dashboard/calendar-view";
 export default function CalendarPage() {
   return (
     <div className="min-h-screen bg-background">
-      <Navbar searchQuery="" onSearchChange={() => {}} />
+      <Navbar />
       <Sidebar />
 
       <main className="pt-16 pb-20 sm:pb-0 sm:pl-56 transition-all duration-300">

@@ -8,7 +8,6 @@ import { Loader2 } from "lucide-react";
 interface UpdateFeedProps {
   updates: Update[];
   filter: FilterType;
-  searchQuery: string;
   onMarkRead: (id: string) => void;
   isLoading: boolean;
 }
@@ -16,7 +15,6 @@ interface UpdateFeedProps {
 export function UpdateFeed({
   updates,
   filter,
-  searchQuery,
   onMarkRead,
   isLoading,
 }: UpdateFeedProps) {
@@ -31,20 +29,11 @@ export function UpdateFeed({
         }
       }
 
-      // Apply search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        return (
-          update.title.toLowerCase().includes(query) ||
-          update.snippet.toLowerCase().includes(query)
-        );
-      }
-
       return true;
     });
 
     return list;
-  }, [updates, filter, searchQuery]);
+  }, [updates, filter]);
 
   if (isLoading) {
     return (
@@ -77,9 +66,7 @@ export function UpdateFeed({
           No {filter === 'all' ? 'updates' : filter + 's'} found
         </h3>
         <p className="text-sm text-muted-foreground max-w-sm">
-          {searchQuery
-            ? `No results for "${searchQuery}". Try a different search term.`
-            : "You're all caught up! Check back later for new updates."}
+          You're all caught up! Check back later for new updates.
         </p>
       </div>
     );

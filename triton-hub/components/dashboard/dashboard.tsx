@@ -11,13 +11,12 @@ import { CourseList } from "./course-list";
 import { format } from "date-fns";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
 import { fetchAndTransformNotifications } from "@/lib/notifications";
-import { isAuthenticated } from "@/lib/auth";
 import { toast } from "sonner";
 
 export function Dashboard() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
-  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCourseCode, setSelectedCourseCode] = useState<string | null>(null);
 
@@ -33,8 +32,8 @@ export function Dashboard() {
     const loadNotifications = async () => {
       setIsLoading(true);
       try {
-        const authenticated = await isAuthenticated();
-        if (!authenticated) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
           setIsLoading(false);
           return;
         }
@@ -168,7 +167,7 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+      <Navbar />
       <Sidebar />
       <StatsSidebar />
 
@@ -251,7 +250,6 @@ export function Dashboard() {
               <UpdateFeed
                 updates={combinedUpdates}
                 filter={selectedCourseCode ? 'all' : activeFilter}
-                searchQuery={searchQuery}
                 onMarkRead={handleMarkRead}
                 isLoading={isLoading}
               />

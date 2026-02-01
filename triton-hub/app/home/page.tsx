@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CanvasIntegration } from "@/components/dashboard/canvas-integration";
 import { Navbar } from "@/components/dashboard/navbar";
@@ -13,7 +13,7 @@ const CANVAS_TOKEN_KEY = "canvas_token";
 const CANVAS_URL_KEY = "canvas_url";
 const CANVAS_UCSD_URL = "https://canvas.ucsd.edu";
 
-export default function HomePage() {
+function HomePageContent() {
   const searchParams = useSearchParams();
   const [ready, setReady] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -75,7 +75,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar searchQuery="" onSearchChange={() => { }} />
+      <Navbar />
       <Sidebar />
       <StatsSidebar />
       <main className="pt-16 pb-20 sm:pb-0 sm:pl-56 xl:pr-72 transition-all duration-300">
@@ -93,5 +93,19 @@ export default function HomePage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <HomePageContent />
+    </Suspense>
   );
 }

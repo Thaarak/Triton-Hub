@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useTheme } from "next-themes";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,22 +13,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  Search,
   Moon,
   Sun,
-  Bell,
   ChevronDown,
   User,
   Settings,
   LogOut,
 } from "lucide-react";
 
-interface NavbarProps {
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
-}
-
-export function Navbar({ searchQuery, onSearchChange }: NavbarProps) {
+export function Navbar() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -61,20 +53,6 @@ export function Navbar({ searchQuery, onSearchChange }: NavbarProps) {
           <span className="hidden text-xl font-semibold text-foreground sm:block">
             Triton Hub
           </span>
-        </div>
-
-        {/* Search Bar */}
-        <div className="mx-4 flex-1 max-w-xl">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search updates, courses, emails..."
-              className="w-full pl-10 bg-secondary/50 border-border focus-visible:ring-ucsd-blue"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-            />
-          </div>
         </div>
 
         {/* Right side */}

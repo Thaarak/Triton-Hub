@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from "date-fns";
-import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList, Calendar, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { fetchNotifications } from "@/lib/notifications";
 import type { Notification } from "@/lib/types";
+import { AddEventModal } from "./add-event-modal";
 import {
   eventTypeColors,
   urgencyColors,
@@ -107,47 +108,48 @@ export function CalendarView() {
   const [filterType, setFilterType] = useState<EventType | "all">("all");
   const [filterUrgency, setFilterUrgency] = useState<Urgency | "all">("all");
 
-  // Fetch notifications from Supabase
-  useEffect(() => {
-    async function loadEvents() {
-      setLoading(true);
-      try {
-        const notifications = await fetchNotifications();
+  // Load events function
+  const loadEvents = useCallback(async () => {
+    setLoading(true);
+    try {
+      const notifications = await fetchNotifications();
 
-        const calendarEvents: CalendarEvent[] = notifications.map((notif: Notification) => {
-          const date = parseNotificationDate(notif.event_date, notif.event_time, notif.created_at);
-          const eventType = mapCategoryToEventType(notif.category);
-          const urgency = mapUrgency(notif.urgency);
+      const calendarEvents: CalendarEvent[] = notifications.map((notif: Notification) => {
+        const date = parseNotificationDate(notif.event_date, notif.event_time, notif.created_at);
+        const eventType = mapCategoryToEventType(notif.category);
+        const urgency = mapUrgency(notif.urgency);
 
-          // Extract time string for display
-          let startTime: string | undefined;
-          if (notif.event_time && notif.event_time !== "EMPTY") {
-            startTime = notif.event_time.replace(/\s*(PST|PDT|EST|EDT|CST|CDT|MST|MDT)$/i, "").trim();
-          }
+        // Extract time string for display
+        let startTime: string | undefined;
+        if (notif.event_time && notif.event_time !== "EMPTY") {
+          startTime = notif.event_time.replace(/\s*(PST|PDT|EST|EDT|CST|CDT|MST|MDT)$/i, "").trim();
+        }
 
-          return {
-            id: `notif-${notif.id}`,
-            title: notif.summary,
-            description: notif.summary,
-            date,
-            startTime,
-            type: eventType,
-            urgency,
-            course: notif.source,
-            link: notif.link !== "EMPTY" ? notif.link : undefined,
-          };
-        });
+        return {
+          id: `notif-${notif.id}`,
+          title: notif.summary,
+          description: notif.summary,
+          date,
+          startTime,
+          type: eventType,
+          urgency,
+          course: notif.source,
+          link: notif.link !== "EMPTY" ? notif.link : undefined,
+        };
+      });
 
-        setEvents(calendarEvents);
-      } catch (error) {
-        console.error("Failed to fetch calendar events:", error);
-      } finally {
-        setLoading(false);
-      }
+      setEvents(calendarEvents);
+    } catch (error) {
+      console.error("Failed to fetch calendar events:", error);
+    } finally {
+      setLoading(false);
     }
-
-    loadEvents();
   }, []);
+
+  // Fetch notifications from Supabase on mount
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
 
 
   const days = useMemo(() => {
@@ -191,6 +193,7 @@ export function CalendarView() {
             {format(currentMonth, "MMMM yyyy")}
           </h2>
           <div className="flex items-center gap-2">
+            <AddEventModal onEventAdded={loadEvents} selectedDate={selectedDate} />
             <Button
               variant="ghost"
               size="icon"

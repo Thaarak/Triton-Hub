@@ -150,3 +150,62 @@ export async function fetchAndTransformNotifications(): Promise<Update[]> {
   const notifications = await fetchNotifications();
   return transformToUpdates(notifications);
 }
+
+/**
+ * Input type for creating a new notification/event.
+ */
+export type CreateNotificationInput = {
+  source: string;
+  category: string;
+  event_date: string; // Format: "YYYY-MM-DD" or "EMPTY"
+  event_time: string; // Format: "HH:MM AM/PM" or "EMPTY"
+  urgency: "high" | "medium" | "low";
+  link: string;
+  summary: string;
+};
+
+/**
+ * Create a new notification for the current authenticated user.
+ * Returns the created notification or throws an error.
+ */
+export async function createNotification(input: CreateNotificationInput): Promise<Notification> {
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) {
+    console.error("No Supabase session found. User must be logged in.");
+    throw new Error("You must be logged in to create an event");
+  }
+
+  console.log("Creating notification for user:", session.user.id);
+  console.log("Notification data:", input);
+
+  const insertData = {
+    user_id: session.user.id,
+    source: input.source,
+    category: input.category,
+    event_date: input.event_date || "EMPTY",
+    event_time: input.event_time || "EMPTY",
+    urgency: input.urgency,
+    link: input.link || "EMPTY",
+    summary: input.summary,
+  };
+
+  console.log("Inserting into Supabase:", insertData);
+
+  const { data, error } = await supabase
+    .from("notifications")
+    .insert(insertData)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Supabase insert error:", error);
+    console.error("Error code:", error.code);
+    console.error("Error message:", error.message);
+    console.error("Error details:", error.details);
+    throw new Error(`Failed to create event: ${error.message}`);
+  }
+
+  console.log("Successfully created notification:", data);
+  return data;
+}
