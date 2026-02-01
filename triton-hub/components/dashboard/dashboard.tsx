@@ -15,6 +15,9 @@ import { supabase } from "@/lib/supabase";
 import { syncCanvasData } from "@/lib/canvas";
 import { toast } from "sonner";
 
+import { getFlaskEmails, getFlaskAuthStatus } from "@/lib/flask";
+import { Mail } from "lucide-react";
+
 export function Dashboard() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -25,7 +28,7 @@ export function Dashboard() {
   const [readUpdates, setReadUpdates] = useState<Set<string>>(new Set());
   const [completedUpdates, setCompletedUpdates] = useState<Set<string>>(new Set());
 
-  // Canvas State
+  // Canvas State 
   const [canvasData, setCanvasData] = useState<{
     classes: any[];
     assignments: any[];
@@ -33,30 +36,46 @@ export function Dashboard() {
     announcements: any[];
   } | null>(null);
 
+  // Flask/Email State
+  const [emailData, setEmailData] = useState<any[]>([]);
+  const [isFlaskAuthenticated, setIsFlaskAuthenticated] = useState(false);
+
   useEffect(() => {
     const initSync = async () => {
       setIsLoading(true);
       try {
+        // 1. Supabase/Canvas Sync
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        if (session) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('canvas_token')
+            .eq('id', session.user.id)
+            .single();
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('canvas_token')
-          .eq('id', session.user.id)
-          .single();
+          if (profile?.canvas_token) {
+            try {
+              const data = await syncCanvasData(profile.canvas_token);
+              setCanvasData(data);
+            } catch (syncError) {
+              console.error("Sync failed:", syncError);
+              toast.error("Failed to sync with Canvas");
+            }
+          }
+        }
 
-        if (profile?.canvas_token) {
-          try {
-            const data = await syncCanvasData(profile.canvas_token);
-            setCanvasData(data);
-          } catch (syncError) {
-            console.error("Sync failed:", syncError);
-            toast.error("Failed to sync with Canvas");
+        // 2. Flask/Gmail Sync
+        const authStatus = await getFlaskAuthStatus();
+        setIsFlaskAuthenticated(authStatus.authenticated);
+
+        if (authStatus.authenticated) {
+          const emails = await getFlaskEmails();
+          if (emails && emails.emails) {
+            setEmailData(emails.emails);
           }
         }
       } catch (error) {
-        console.error("Profile fetch error:", error);
+        console.error("Initial sync error:", error);
       } finally {
         setIsLoading(false);
       }
@@ -174,10 +193,33 @@ export function Dashboard() {
       }
     });
 
+    // 4. Gmail Emails -> Updates
+    emailData.forEach(e => {
+      const id = `gmail-${e.id}`;
+      const isUnread = !readUpdates.has(id);
+
+      updates.push({
+        id,
+        source: "email",
+        category: "announcement", // Mapping to announcement for now or create new category
+        title: e.subject || "(No Subject)",
+        snippet: `From: ${e.from}\n\n${e.snippet}`,
+        timestamp: new Date(e.date),
+        url: "#", // Gmail web URL is complex, can leave as # for now
+        unread: isUnread,
+        priority: isUnread ? "normal" : "normal"
+      });
+    });
+
     // Filter out completed assignments in the "All" tab
     let filteredUpdates = updates;
     if (activeFilter === "all" || activeFilter === "urgent") {
       filteredUpdates = updates.filter(u => !u.isCompleted);
+    }
+
+    // Filter by category if needed (Gmail currently mapped to 'announcement')
+    if (activeFilter === "email") {
+      filteredUpdates = updates.filter(u => u.source === "email");
     }
 
     // Unified Smart Sorting: Urgency + Proximity (Lowest in About)
@@ -220,7 +262,7 @@ export function Dashboard() {
       // 4. For everything else (Read/Finished), sort by newest first
       return b.timestamp.getTime() - a.timestamp.getTime();
     });
-  }, [canvasData, readUpdates, completedUpdates, selectedCourseCode, activeFilter]);
+  }, [canvasData, emailData, readUpdates, completedUpdates, selectedCourseCode, activeFilter]);
 
   const handleMarkRead = useCallback((id: string) => {
     // If it's an assignment, we mark it as completed

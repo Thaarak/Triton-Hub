@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, Key, Link as LinkIcon, RefreshCw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { saveCanvasToken } from "@/lib/flask";
 
 const TOKEN_STORAGE_KEY = 'canvas_token';
 const URL_STORAGE_KEY = 'canvas_url';
@@ -151,6 +152,13 @@ export function CanvasSyncCard({ onSyncComplete, className }: CanvasSyncCardProp
             // Save credentials
             sessionStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
             sessionStorage.setItem(URL_STORAGE_KEY, canvasUrl);
+
+            // Also send to our Flask backend
+            try {
+                await saveCanvasToken(accessToken, canvasUrl);
+            } catch (saveError) {
+                console.error("Failed to save token to Flask:", saveError);
+            }
 
             onSyncComplete({ classes, assignments, grades, announcements });
         } catch (err: any) {

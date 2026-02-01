@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
         source: '/canvas-api/:path*',
         destination: 'https://canvas.ucsd.edu/:path*',
       },
+      {
+        source: '/api/flask/:path*',
+        destination: 'http://127.0.0.1:5328/api/:path*',
+      },
     ];
   },
 };

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ExternalLink, GraduationCap, ClipboardList, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { saveCanvasToken } from "@/lib/flask";
 
 interface ClassItem {
     id: number;
@@ -173,6 +174,15 @@ export function CanvasIntegration() {
                 return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
             });
             setAssignments(allAssigns.filter(a => !a.submittedAt)); // Show only upcoming/unsubmitted
+
+            // Also send to our Flask backend
+            try {
+                await saveCanvasToken(accessToken, canvasUrl);
+            } catch (saveError) {
+                console.error("Failed to save token to Flask:", saveError);
+                // We don't necessarily want to fail the whole sync if this fails, 
+                // but it's good to know.
+            }
 
         } catch (err: any) {
             setError(err.message || 'Failed to sync with Canvas');
