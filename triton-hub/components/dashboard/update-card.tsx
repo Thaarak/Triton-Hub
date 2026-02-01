@@ -61,6 +61,11 @@ const categoryConfig = {
   },
 };
 
+// Helper to check if a date is valid
+function isValidDate(date: Date | undefined | null): date is Date {
+  return date instanceof Date && !isNaN(date.getTime());
+}
+
 export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
   const [expanded, setExpanded] = useState(false);
   const config = sourceConfig[update.source];
@@ -136,9 +141,11 @@ export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
               </Badge>
             )}
             <span className="text-[10px] font-medium text-muted-foreground uppercase">
-              {update.category === "assignment" && !update.dueDate 
-                ? "No Due Date" 
-                : formatDistanceToNow(update.timestamp, { addSuffix: true })}
+              {update.category === "assignment" && !update.dueDate
+                ? "No Due Date"
+                : isValidDate(update.timestamp)
+                  ? formatDistanceToNow(update.timestamp, { addSuffix: true })
+                  : "Unknown"}
             </span>
           </div>
 
@@ -156,7 +163,7 @@ export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
               {update.course && (
                 <span className="font-medium">{update.course}</span>
               )}
-              {update.dueDate && (
+              {isValidDate(update.dueDate) && (
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   Due {format(update.dueDate, "MMM d, h:mm a")}

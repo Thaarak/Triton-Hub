@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Megaphone, ExternalLink, Calendar as CalendarIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { syncCanvasData } from "@/lib/canvas";
+import { Loader2, Megaphone, ExternalLink } from "lucide-react";
+import { fetchNotifications } from "@/lib/notifications";
+import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
+import type { Notification } from "@/lib/types";
 
 interface AnnouncementItem {
-    id: number;
+    id: string;
     title: string;
     message: string;
     postedAt: string | null;
@@ -16,68 +17,66 @@ interface AnnouncementItem {
     htmlUrl: string;
 }
 
-const TOKEN_STORAGE_KEY = 'canvas_token';
-const URL_STORAGE_KEY = 'canvas_url';
-
 export function AnnouncementView() {
-    const [accessToken, setAccessToken] = useState<string | null>(null);
-    const [canvasUrl, setCanvasUrl] = useState<string | null>(null);
     const [announcements, setAnnouncements] = useState<AnnouncementItem[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
     useEffect(() => {
-        const storedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
-        const storedUrl = sessionStorage.getItem(URL_STORAGE_KEY);
-        setAccessToken(storedToken);
-        setCanvasUrl(storedUrl);
-    }, []);
+        const loadAnnouncements = async () => {
+            setLoading(true);
+            setError(null);
 
-    useEffect(() => {
-        if (accessToken !== null) {
-            if (accessToken) {
-                fetchAnnouncements();
-            } else {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) {
+                    setIsAuthenticated(false);
+                    setLoading(false);
+                    return;
+                }
+                setIsAuthenticated(true);
+
+                const notifications = await fetchNotifications();
+
+                // Filter for announcements only
+                const announcementNotifs = notifications.filter(
+                    (n: Notification) => n.category === "announcement"
+                );
+
+                // Transform to AnnouncementItem format
+                const items: AnnouncementItem[] = announcementNotifs.map((n: Notification) => ({
+                    id: `notif-${n.id}`,
+                    title: n.summary,
+                    message: n.summary,
+                    postedAt: n.created_at,
+                    courseName: n.source,
+                    courseCode: n.source,
+                    htmlUrl: n.link !== "EMPTY" ? n.link : "",
+                }));
+
+                // Sort by postedAt descending (newest first)
+                items.sort((a, b) => {
+                    if (!a.postedAt) return 1;
+                    if (!b.postedAt) return -1;
+                    return new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime();
+                });
+
+                setAnnouncements(items);
+            } catch (err: any) {
+                console.error(err);
+                setError(err.message || "Failed to fetch announcements");
+            } finally {
                 setLoading(false);
             }
-        }
-    }, [accessToken, canvasUrl]);
+        };
 
-    const fetchAnnouncements = async () => {
-        if (!accessToken) return;
-
-        setLoading(true);
-        setError(null);
-
-        try {
-            const { announcements } = await syncCanvasData(accessToken, canvasUrl || undefined);
-
-            // Sort by postedAt descending (newest first)
-            const sorted = announcements.sort((a: any, b: any) => {
-                if (!a.postedAt) return 1;
-                if (!b.postedAt) return -1;
-                return new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime();
-            });
-
-            setAnnouncements(sorted);
-
-        } catch (err: any) {
-            console.error(err);
-            setError(err.message || 'Failed to fetch announcements');
-        } finally {
-            setLoading(false);
-        }
-    };
+        loadAnnouncements();
+    }, []);
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return 'Unknown date';
         return format(new Date(dateStr), 'MMM d, h:mm a');
-    };
-
-    // Strip HTML tags for preview (simple version)
-    const stripHtml = (html: string) => {
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        return doc.body.textContent || "";
     };
 
     if (loading) {
@@ -88,15 +87,15 @@ export function AnnouncementView() {
         );
     }
 
-    if (!accessToken) {
+    if (isAuthenticated === false) {
         return (
             <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-border rounded-xl p-6 text-center">
-                <h3 className="text-lg font-semibold">Canvas Not Connected</h3>
+                <h3 className="text-lg font-semibold">Not Signed In</h3>
                 <p className="text-muted-foreground mt-2 mb-4">
-                    Connect your Canvas account on the Home page to view your announcements here.
+                    Please sign in to view your announcements.
                 </p>
-                <a href="/home" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90">
-                    Go to Home
+                <a href="/login" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90">
+                    Sign In
                 </a>
             </div>
         );
@@ -142,7 +141,7 @@ export function AnnouncementView() {
                                     {a.title}
                                 </h3>
                                 <div className="text-sm text-muted-foreground mt-2 line-clamp-2 leading-relaxed">
-                                    {stripHtml(a.message)}
+                                    {a.message}
                                 </div>
                             </div>
                         </div>

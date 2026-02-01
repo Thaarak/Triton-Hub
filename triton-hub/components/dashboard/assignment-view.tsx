@@ -3,128 +3,86 @@
 import { useState, useEffect } from "react";
 import { Loader2, ExternalLink, Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fetchNotifications } from "@/lib/notifications";
+import { supabase } from "@/lib/supabase";
+import type { Notification } from "@/lib/types";
 
 interface AssignmentItem {
-    id: number;
-    courseId: number;
+    id: string;
     courseName: string;
     courseCode: string;
     name: string;
     dueAt: string | null;
-    pointsPossible: number | null;
-    score: number | null;
-    submittedAt: string | null;
-    workflowState: string | null;
     htmlUrl: string;
 }
 
-const TOKEN_STORAGE_KEY = 'canvas_token';
-const URL_STORAGE_KEY = 'canvas_url';
-const CANVAS_UCSD_URL = 'https://canvas.ucsd.edu';
-
 export function AssignmentView() {
-    const [accessToken, setAccessToken] = useState<string | null>(null);
-    const [canvasUrl, setCanvasUrl] = useState<string | null>(null);
     const [assignments, setAssignments] = useState<AssignmentItem[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
     useEffect(() => {
-        const storedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
-        const storedUrl = sessionStorage.getItem(URL_STORAGE_KEY);
-        setAccessToken(storedToken);
-        setCanvasUrl(storedUrl || CANVAS_UCSD_URL);
-    }, []);
+        const loadAssignments = async () => {
+            setLoading(true);
+            setError(null);
 
-    useEffect(() => {
-        if (accessToken !== null) { // Only fetch after initial load checks token
-            if (accessToken) {
-                fetchAssignments();
-            } else {
-                setLoading(false); // No token, stop loading
-            }
-        }
-    }, [accessToken, canvasUrl]);
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) {
+                    setIsAuthenticated(false);
+                    setLoading(false);
+                    return;
+                }
+                setIsAuthenticated(true);
 
-    const headers = () => ({
-        Authorization: `Bearer ${accessToken}`,
-    });
+                const notifications = await fetchNotifications();
 
-    const getApiBase = () => {
-        const normalized = (canvasUrl || CANVAS_UCSD_URL).replace(/\/$/, '');
-        const isUcsd = normalized === CANVAS_UCSD_URL || normalized.includes('canvas.ucsd.edu');
-        // Use proxy in development for UCSD to avoid CORS
-        if (isUcsd && process.env.NODE_ENV === 'development') {
-            return '/canvas-api';
-        }
-        return normalized;
-    };
+                // Filter for assignments only
+                const assignmentNotifs = notifications.filter(
+                    (n: Notification) => n.category === "assignment"
+                );
 
-    const fetchAssignments = async () => {
-        if (!accessToken) return;
+                // Transform to AssignmentItem format
+                const items: AssignmentItem[] = assignmentNotifs.map((n: Notification) => {
+                    // Parse event_date and event_time
+                    let dueAt: string | null = null;
+                    if (n.event_date && n.event_date !== "EMPTY") {
+                        dueAt = n.event_date;
+                        if (n.event_time && n.event_time !== "EMPTY") {
+                            // Append time info for display
+                            dueAt = `${n.event_date} ${n.event_time}`;
+                        }
+                    }
 
-        setLoading(true);
-        setError(null);
-
-        try {
-            const base = getApiBase();
-
-            // 1. Fetch Courses to get IDs and Names
-            const coursesRes = await fetch(`${base}/api/v1/courses?enrollment_type=student&enrollment_state=active&per_page=50`, {
-                headers: headers()
-            });
-
-            if (!coursesRes.ok) throw new Error(`Canvas API error: ${coursesRes.status}`);
-            const coursesJson = await coursesRes.json();
-
-            // Filter courses similar to Home page logic (simplified for now, or copy exact logic if needed)
-            // Just usage active courses for now
-            const filteredCourses = coursesJson;
-
-            // 2. Fetch Assignments
-            const assignmentPromises = filteredCourses.map(async (course: any) => {
-                const res = await fetch(`${base}/api/v1/courses/${course.id}/assignments?include[]=submission&per_page=50&order_by=due_at`, {
-                    headers: headers()
+                    return {
+                        id: `notif-${n.id}`,
+                        courseName: n.source,
+                        courseCode: n.source,
+                        name: n.summary,
+                        dueAt,
+                        htmlUrl: n.link !== "EMPTY" ? n.link : "",
+                    };
                 });
-                if (!res.ok) return [];
-                const assigns = await res.json();
-                return assigns.map((a: any) => ({
-                    id: a.id,
-                    courseId: course.id,
-                    courseName: course.name,
-                    courseCode: course.course_code ?? '',
-                    name: a.name,
-                    dueAt: a.due_at,
-                    pointsPossible: a.points_possible,
-                    score: a.submission?.score ?? null,
-                    submittedAt: a.submission?.submitted_at ?? null,
-                    workflowState: a.submission?.workflow_state ?? null,
-                    htmlUrl: a.html_url,
-                }));
-            });
 
-            const allAssigns = (await Promise.all(assignmentPromises)).flat();
+                // Sort by due date (nearest first)
+                items.sort((a, b) => {
+                    if (!a.dueAt) return 1;
+                    if (!b.dueAt) return -1;
+                    return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+                });
 
-            // Sort: Upcoming (nearest due date first)
-            allAssigns.sort((a, b) => {
-                if (!a.dueAt) return 1;
-                if (!b.dueAt) return -1;
-                return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
-            });
+                setAssignments(items);
+            } catch (err: any) {
+                console.error(err);
+                setError(err.message || "Failed to fetch assignments");
+            } finally {
+                setLoading(false);
+            }
+        };
 
-            // Filter out submitted ones? User usually wants to see what's TODO.
-            // Let's filter out submitted ones for "Assignments" view usually
-            const pendingAssigns = allAssigns.filter(a => !a.submittedAt && a.workflowState !== 'graded');
-
-            setAssignments(pendingAssigns);
-
-        } catch (err: any) {
-            console.error(err);
-            setError(err.message || 'Failed to fetch assignments');
-        } finally {
-            setLoading(false);
-        }
-    };
+        loadAssignments();
+    }, []);
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return 'No due date';
@@ -144,15 +102,15 @@ export function AssignmentView() {
         );
     }
 
-    if (!accessToken) {
+    if (isAuthenticated === false) {
         return (
             <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-border rounded-xl p-6 text-center">
-                <h3 className="text-lg font-semibold">Canvas Not Connected</h3>
+                <h3 className="text-lg font-semibold">Not Signed In</h3>
                 <p className="text-muted-foreground mt-2 mb-4">
-                    Connect your Canvas account on the Home page to view your assignments here.
+                    Please sign in to view your assignments.
                 </p>
-                <a href="/home" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90">
-                    Go to Home
+                <a href="/login" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90">
+                    Sign In
                 </a>
             </div>
         );
@@ -198,7 +156,7 @@ export function AssignmentView() {
                                     {a.name}
                                 </h3>
                                 <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">
-                                    {a.pointsPossible ? `${a.pointsPossible} pts` : 'No points'}
+                                    {a.courseName}
                                 </p>
                             </div>
                         </div>

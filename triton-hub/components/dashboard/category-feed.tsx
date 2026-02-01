@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
-import { mockUpdates } from "@/lib/mock-data";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { fetchAndTransformNotifications } from "@/lib/notifications";
 import type { Update, Category } from "@/lib/types";
 import { Navbar } from "./navbar";
 import { Sidebar } from "./sidebar";
 import { UpdateCard } from "./update-card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2 } from "lucide-react";
-import { format } from "date-fns";
 
 interface CategoryFeedProps {
   category: Category;
@@ -17,11 +16,27 @@ interface CategoryFeedProps {
 }
 
 export function CategoryFeed({ category, title, description }: CategoryFeedProps) {
-  const [updates, setUpdates] = useState<Update[]>(
-    mockUpdates.filter((u) => u.category === category)
-  );
+  const [updates, setUpdates] = useState<Update[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadNotifications = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const allUpdates = await fetchAndTransformNotifications();
+      // Filter by category, mapping "personal" to "event" as done in notifications.ts
+      const filtered = allUpdates.filter((u) => u.category === category);
+      setUpdates(filtered);
+    } catch (error) {
+      console.error("Failed to load notifications:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [category]);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
 
   const handleMarkRead = useCallback((id: string) => {
     setUpdates((prev) =>
@@ -32,11 +47,8 @@ export function CategoryFeed({ category, title, description }: CategoryFeedProps
   }, []);
 
   const handleRefresh = useCallback(() => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1500);
-  }, []);
+    loadNotifications();
+  }, [loadNotifications]);
 
   const filteredUpdates = useMemo(() => {
     if (!searchQuery) return updates;
