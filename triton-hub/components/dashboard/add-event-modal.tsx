@@ -27,10 +27,10 @@ import { createNotification, type CreateNotificationInput } from "@/lib/notifica
 import { toast } from "sonner";
 
 const categoryOptions = [
-  { value: "event", label: "Event" },
   { value: "assignment", label: "Assignment" },
+  { value: "announcement", label: "Reminder / Announcement" },
+  { value: "event", label: "Event" },
   { value: "exam", label: "Exam" },
-  { value: "announcement", label: "Announcement" },
   { value: "personal", label: "Personal" },
 ];
 
@@ -43,16 +43,40 @@ const urgencyOptions = [
 interface AddEventModalProps {
   onEventAdded?: () => void;
   selectedDate?: Date | null;
+  triggerLabel?: string;
 }
 
-export function AddEventModal({ onEventAdded, selectedDate }: AddEventModalProps) {
+function getCategoryCopy(category: string): { title: string; description: string; success: string } {
+  switch (category) {
+    case "assignment":
+      return {
+        title: "Add Assignment",
+        description: "This will show in Home, Calendar, and the Assignments page.",
+        success: "Assignment added successfully!",
+      };
+    case "announcement":
+      return {
+        title: "Add Reminder",
+        description: "This will show in Home and the Announcements page.",
+        success: "Reminder added successfully!",
+      };
+    default:
+      return {
+        title: "Add Item",
+        description: "Create a new item. It will appear in Home and any matching category view.",
+        success: "Item added successfully!",
+      };
+  }
+}
+
+export function AddEventModal({ onEventAdded, selectedDate, triggerLabel = "Add Item" }: AddEventModalProps) {
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form state
   const [summary, setSummary] = useState("");
   const [source, setSource] = useState("");
-  const [category, setCategory] = useState("event");
+  const [category, setCategory] = useState("assignment");
   const [eventDate, setEventDate] = useState(
     selectedDate ? format(selectedDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")
   );
@@ -66,7 +90,7 @@ export function AddEventModal({ onEventAdded, selectedDate }: AddEventModalProps
       // Reset to defaults when opening
       setSummary("");
       setSource("");
-      setCategory("event");
+      setCategory("assignment");
       setEventDate(
         selectedDate ? format(selectedDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")
       );
@@ -109,7 +133,7 @@ export function AddEventModal({ onEventAdded, selectedDate }: AddEventModalProps
       };
 
       await createNotification(input);
-      toast.success("Event added successfully!");
+      toast.success(getCategoryCopy(category).success);
       setOpen(false);
       onEventAdded?.();
     } catch (error) {
@@ -126,25 +150,27 @@ export function AddEventModal({ onEventAdded, selectedDate }: AddEventModalProps
       <DialogTrigger asChild>
         <Button className="gap-2">
           <Plus className="h-4 w-4" />
-          Add Event
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Add New Event</DialogTitle>
+            <DialogTitle>{getCategoryCopy(category).title}</DialogTitle>
             <DialogDescription>
-              Create a new event or reminder. It will appear on your calendar and notifications.
+              {getCategoryCopy(category).description}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             {/* Summary/Description */}
             <div className="grid gap-2">
-              <Label htmlFor="summary">Description *</Label>
+              <Label htmlFor="summary">
+                {category === "assignment" ? "Assignment details *" : category === "announcement" ? "Reminder details *" : "Description *"}
+              </Label>
               <Textarea
                 id="summary"
-                placeholder="What is this event about?"
+                placeholder={category === "assignment" ? "What needs to get done?" : "What should you remember?"}
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
                 className="min-h-[80px]"
@@ -165,10 +191,10 @@ export function AddEventModal({ onEventAdded, selectedDate }: AddEventModalProps
             {/* Category and Urgency in a row */}
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="category">Type</Label>
                 <Select value={category} onValueChange={setCategory}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
                     {categoryOptions.map((option) => (
@@ -199,6 +225,14 @@ export function AddEventModal({ onEventAdded, selectedDate }: AddEventModalProps
                 </Select>
               </div>
             </div>
+
+            {(category === "assignment" || category === "announcement") && (
+              <div className="rounded-xl border border-white/10 bg-secondary/50 px-4 py-3 text-sm text-muted-foreground">
+                {category === "assignment"
+                  ? "Assignments created here automatically show up in the Home feed, Calendar, and Assignments page."
+                  : "Reminders created here automatically show up in the Home feed and Announcements page."}
+              </div>
+            )}
 
             {/* Date and Time in a row */}
             <div className="grid grid-cols-2 gap-4">
@@ -249,10 +283,10 @@ export function AddEventModal({ onEventAdded, selectedDate }: AddEventModalProps
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Adding...
+                  Saving...
                 </>
               ) : (
-                "Add Event"
+                getCategoryCopy(category).title
               )}
             </Button>
           </DialogFooter>

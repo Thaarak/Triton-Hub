@@ -206,17 +206,19 @@ export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
               </span>
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            asChild
-          >
-            <a href={update.url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="h-4 w-4" />
-              <span className="sr-only">Open link</span>
-            </a>
-          </Button>
+          {update.url ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              asChild
+            >
+              <a href={update.url} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                <span className="sr-only">Open link</span>
+              </a>
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="icon"

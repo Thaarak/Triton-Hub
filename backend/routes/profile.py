@@ -105,18 +105,19 @@ def create_notification():
         "urgency": data.get("urgency", "medium"),
         "link": data.get("link") or "EMPTY",
         "summary": data.get("summary", ""),
+        "completed": bool(data.get("completed", False)),
     }
     if not row["summary"]:
         return jsonify({"error": "summary is required"}), 400
     try:
         supabase = get_supabase_client()
-        res = supabase.table("notifications").insert(row).select().execute()
+        res = supabase.table("notifications").insert(row).execute()
         if res.data and len(res.data) > 0:
             return jsonify(res.data[0]), 201
         return jsonify({"error": "Failed to create notification"}), 500
     except Exception as e:
         print(f"[profile] create_notification: {str(e)}")
-        return jsonify({"error": "Failed to create notification"}), 500
+        return jsonify({"error": f"Failed to create notification: {str(e)}"}), 500
 
 
 @profile.route("/notifications", methods=["PATCH"])

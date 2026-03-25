@@ -8,6 +8,7 @@ import { StatsSidebar } from "./stats-sidebar";
 import { FilterBar } from "./filter-bar";
 import { UpdateFeed } from "./update-feed";
 import { CourseList } from "./course-list";
+import { AddEventModal } from "./add-event-modal";
 import { format } from "date-fns";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,50 +29,49 @@ export function Dashboard() {
   const [updates, setUpdates] = useState<Update[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
 
-  useEffect(() => {
-    const loadNotifications = async () => {
-      setIsLoading(true);
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const backendToken =
-          typeof sessionStorage !== "undefined"
-            ? sessionStorage.getItem("triton_session_token")
-            : null;
+  const loadNotifications = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const backendToken =
+        typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem("triton_session_token")
+          : null;
 
-        // Email/password: Supabase session. Google OAuth: no session but backend Bearer token (see app/page.tsx).
-        if (!session && !backendToken) {
-          setIsLoading(false);
-          return;
-        }
-
-        const notificationUpdates = await fetchAndTransformNotifications();
-        setUpdates(notificationUpdates);
-
-        // Extract unique courses from notifications for the classes view
-        const uniqueCourses = new Map<string, { name: string; courseCode: string }>();
-        notificationUpdates.forEach((update) => {
-          if (update.course && !uniqueCourses.has(update.course)) {
-            uniqueCourses.set(update.course, {
-              name: update.course,
-              courseCode: update.course,
-            });
-          }
-        });
-        setClasses(Array.from(uniqueCourses.values()).map((c, idx) => ({
-          id: idx,
-          name: c.name,
-          courseCode: c.courseCode,
-        })));
-      } catch (error) {
-        console.error("Failed to load notifications:", error);
-        toast.error("Failed to load notifications");
-      } finally {
-        setIsLoading(false);
+      if (!session && !backendToken) {
+        setUpdates([]);
+        setClasses([]);
+        return;
       }
-    };
 
-    loadNotifications();
+      const notificationUpdates = await fetchAndTransformNotifications();
+      setUpdates(notificationUpdates);
+
+      const uniqueCourses = new Map<string, { name: string; courseCode: string }>();
+      notificationUpdates.forEach((update) => {
+        if (update.course && !uniqueCourses.has(update.course)) {
+          uniqueCourses.set(update.course, {
+            name: update.course,
+            courseCode: update.course,
+          });
+        }
+      });
+      setClasses(Array.from(uniqueCourses.values()).map((c, idx) => ({
+        id: idx,
+        name: c.name,
+        courseCode: c.courseCode,
+      })));
+    } catch (error) {
+      console.error("Failed to load notifications:", error);
+      toast.error("Failed to load notifications");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
 
   const handleCourseClick = useCallback((courseCode: string) => {
     setSelectedCourseCode(courseCode);
@@ -165,9 +165,8 @@ export function Dashboard() {
   }, [updates]);
 
   const handleRefresh = useCallback(() => {
-    setIsLoading(true);
-    setTimeout(() => setIsLoading(false), 1500);
-  }, []);
+    loadNotifications();
+  }, [loadNotifications]);
 
   const unreadCount = combinedUpdates.filter((u) => u.unread).length;
 
@@ -177,11 +176,11 @@ export function Dashboard() {
       <Sidebar />
       <StatsSidebar />
 
-      <main className="pt-16 pb-20 sm:pb-0 sm:pl-56 xl:pr-72 transition-all duration-300">
-        <div className="p-4 sm:p-6 lg:p-8 max-w-4xl">
+      <main className="pt-16 pb-20 sm:pb-0 sm:pl-64 xl:pr-80 transition-all duration-300">
+        <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
           {/* Header */}
-          <div className="mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
+          <div className="mb-8 rounded-[32px] border border-white/10 bg-card/80 p-6 shadow-sm">
+            <div className="mb-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 {selectedCourseCode && (
                   <Button
@@ -194,12 +193,15 @@ export function Dashboard() {
                   </Button>
                 )}
                 <div>
-                  <h1 className="text-2xl font-bold text-foreground">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                    {selectedCourseCode ? "Course focus" : activeFilter === "classes" ? "Courses" : "Dashboard"}
+                  </p>
+                  <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
                     {selectedCourseCode
                       ? selectedCourseCode
                       : (activeFilter === "classes" ? "My Courses" : "Your Updates")}
                   </h1>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
                     {selectedCourseCode
                       ? `Viewing assignments and updates for ${selectedCourseCode}`
                       : (activeFilter === "classes"
@@ -208,11 +210,19 @@ export function Dashboard() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="hidden sm:inline">Showing updates from</span>
-                <span className="font-medium text-foreground">
-                  {format(new Date(), "MMM d")} - Today
-                </span>
+              <div className="flex items-center gap-3 self-start sm:self-auto">
+                <div className="rounded-2xl border border-white/10 bg-secondary/50 px-4 py-3 text-sm text-muted-foreground">
+                  <span className="block text-[11px] uppercase tracking-[0.2em] text-muted-foreground/80">Current snapshot</span>
+                  <span className="font-medium text-foreground">
+                    {format(new Date(), "MMM d")} - Today
+                  </span>
+                </div>
+                {!selectedCourseCode ? (
+                  <AddEventModal
+                    onEventAdded={loadNotifications}
+                    triggerLabel="Add assignment or reminder"
+                  />
+                ) : null}
               </div>
             </div>
           </div>
@@ -231,7 +241,7 @@ export function Dashboard() {
             classes.length > 0 ? (
               <CourseList classes={classes} onCourseClick={handleCourseClick} />
             ) : isLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+              <div className="flex flex-col items-center justify-center rounded-[28px] border border-white/10 bg-card/80 py-20 text-muted-foreground">
                 <div className="p-4 rounded-full bg-muted/50 mb-4 animate-pulse">
                   <span className="text-4xl">📚</span>
                 </div>
@@ -241,7 +251,7 @@ export function Dashboard() {
                 </p>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+              <div className="flex flex-col items-center justify-center rounded-[28px] border border-white/10 bg-card/80 py-20 text-muted-foreground">
                 <div className="p-4 rounded-full bg-muted/50 mb-4">
                   <span className="text-4xl">📚</span>
                 </div>

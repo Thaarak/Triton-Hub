@@ -257,16 +257,23 @@ export function CalendarView() {
     : [];
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6">
+    <div className="flex flex-col gap-6 lg:flex-row">
       {/* Calendar Grid */}
       <div className="flex-1">
         {/* Month Navigation */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-foreground">
+        <div className="mb-6 flex items-center justify-between rounded-[28px] border border-white/10 bg-card/80 p-5 shadow-sm">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">Month view</p>
+            <h2 className="mt-2 text-2xl font-semibold text-foreground">
             {format(currentMonth, "MMMM yyyy")}
-          </h2>
+            </h2>
+          </div>
           <div className="flex items-center gap-2">
-            <AddEventModal onEventAdded={loadEvents} selectedDate={selectedDate} />
+            <AddEventModal
+              onEventAdded={loadEvents}
+              selectedDate={selectedDate}
+              triggerLabel="Add assignment or reminder"
+            />
             <Button
               variant="ghost"
               size="icon"
@@ -286,7 +293,7 @@ export function CalendarView() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-4 mb-6">
+        <div className="mb-6 flex flex-wrap gap-4 rounded-[28px] border border-white/10 bg-card/80 p-5 shadow-sm">
           <p className="text-sm text-muted-foreground w-full sm:w-auto sm:mr-2">
             Showing <span className="font-medium text-foreground">assignments</span> only. Announcements stay on the Announcements page.
           </p>
@@ -319,9 +326,9 @@ export function CalendarView() {
         </div>
 
         {/* Calendar Grid */}
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="overflow-hidden rounded-[28px] border border-white/10 bg-card/80 shadow-sm">
           {/* Day Headers */}
-          <div className="grid grid-cols-7 border-b border-border">
+          <div className="grid grid-cols-7 border-b border-white/10">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
               <div
                 key={day}
@@ -441,7 +448,7 @@ export function CalendarView() {
 
       {/* Selected Day Events Panel */}
       <div className="lg:w-80">
-        <div className="rounded-lg border border-border bg-card p-4 sticky top-20">
+        <div className="sticky top-20 rounded-[28px] border border-white/10 bg-card/80 p-5 shadow-sm">
           <h3 className="font-semibold text-foreground mb-1">
             {selectedDate ? format(selectedDate, "EEEE, MMMM d") : "Select a date"}
           </h3>
@@ -454,7 +461,7 @@ export function CalendarView() {
               No events scheduled for this day.
             </p>
           ) : (
-            <div className="space-y-3 mt-4">
+            <div className="mt-4 space-y-3">
               {selectedDateEvents.map((event) => {
                 const Icon = eventTypeIcons[event.type];
                 const isUpdating = updatingEvents.has(event.notificationId);
@@ -462,7 +469,7 @@ export function CalendarView() {
                   <div
                     key={event.id}
                     className={cn(
-                      "p-3 rounded-lg border-l-4 transition-opacity",
+                      "rounded-2xl border-l-4 p-3 transition-opacity",
                       eventTypeColors[event.type].bg,
                       eventTypeColors[event.type].border,
                       event.completed && "opacity-60"
@@ -540,7 +547,7 @@ export function CalendarView() {
           )}
 
           {filteredForgotToCheckOff.length > 0 && (
-            <div className="mt-8 pt-6 border-t border-border">
+            <div className="mt-8 border-t border-white/10 pt-6">
               <h4 className="text-sm font-semibold text-foreground mb-1">Forgot to check off?</h4>
               <p className="text-xs text-muted-foreground mb-4">
                 These assignments were due more than two weeks ago and are still incomplete. They are hidden from the month grid so recent work stays visible.
@@ -553,7 +560,7 @@ export function CalendarView() {
                     <div
                       key={event.id}
                       className={cn(
-                        "p-3 rounded-lg border-l-4 transition-opacity border-amber-500/40 bg-amber-500/5",
+                        "rounded-2xl border-l-4 border-amber-500/40 bg-amber-500/5 p-3 transition-opacity",
                         eventTypeColors[event.type].bg,
                         eventTypeColors[event.type].border
                       )}

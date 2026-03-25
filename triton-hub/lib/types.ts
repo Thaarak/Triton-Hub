@@ -28,6 +28,7 @@ export type Notification = {
   urgency: string;
   link: string;
   summary: string;
+  snippet?: string;
   user_id: string;
   completed: boolean;
 };

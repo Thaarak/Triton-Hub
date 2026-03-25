@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { setStoredProfilePreferences } from "@/lib/profile-preferences";
 import {
   getLocalAvatarUrl,
   getLocalDisplayName,
@@ -70,6 +71,7 @@ export function SettingsView() {
             username,
             avatarUrl,
           });
+          setStoredProfilePreferences({ displayName: username, avatarUrl });
           return;
         }
 
@@ -89,11 +91,14 @@ export function SettingsView() {
           return;
         }
         const data = await res.json();
+        const resolvedName = data.full_name || localName || "";
+        const resolvedAvatar = localAvatar;
         setProfile({
           email: data.email || "",
-          username: data.full_name || localName || "",
-          avatarUrl: localAvatar,
+          username: resolvedName,
+          avatarUrl: resolvedAvatar,
         });
+        setStoredProfilePreferences({ displayName: resolvedName, avatarUrl: resolvedAvatar });
       } catch {
         toast.error("Failed to load settings");
       } finally {
@@ -148,6 +153,10 @@ export function SettingsView() {
         }
       }
 
+      setStoredProfilePreferences({
+        displayName: profile.username.trim(),
+        avatarUrl: profile.avatarUrl.trim(),
+      });
       setLocalDisplayName(profile.username);
       setLocalAvatarUrl(profile.avatarUrl);
       toast.success("Profile updated");
@@ -191,12 +200,15 @@ export function SettingsView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your feed, appearance, and account details.</p>
+      <div className="rounded-[28px] border border-white/10 bg-card/80 p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">Settings</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Personalize your Triton Hub workspace</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
+          Choose what appears in your feed, tune the visual theme, and keep your profile details aligned across the app.
+        </p>
       </div>
 
-      <section className="rounded-xl border p-5 space-y-4">
+      <section className="rounded-[28px] border border-white/10 bg-card/80 p-6 space-y-4 shadow-sm">
         <h2 className="text-lg font-semibold">Content</h2>
         <div className="space-y-2">
           <Label>Show updates from</Label>
@@ -214,22 +226,22 @@ export function SettingsView() {
           </div>
           <p className="text-xs text-muted-foreground">Applies to announcements, assignments, and calendar views.</p>
         </div>
-        <Button type="button" onClick={handleSaveContent}>Save content preferences</Button>
+        <Button type="button" className="rounded-full px-5" onClick={handleSaveContent}>Save content preferences</Button>
       </section>
 
-      <section className="rounded-xl border p-5 space-y-4">
+      <section className="rounded-[28px] border border-white/10 bg-card/80 p-6 space-y-4 shadow-sm">
         <h2 className="text-lg font-semibold">Appearance</h2>
         <div className="flex gap-2">
-          <Button type="button" variant={theme === "light" ? "default" : "outline"} onClick={() => setTheme("light")}>
+          <Button type="button" className="rounded-full px-5" variant={theme === "light" ? "default" : "outline"} onClick={() => setTheme("light")}>
             Light mode
           </Button>
-          <Button type="button" variant={theme === "dark" ? "default" : "outline"} onClick={() => setTheme("dark")}>
+          <Button type="button" className="rounded-full px-5" variant={theme === "dark" ? "default" : "outline"} onClick={() => setTheme("dark")}>
             Dark mode
           </Button>
         </div>
       </section>
 
-      <section className="rounded-xl border p-5 space-y-4">
+      <section className="rounded-[28px] border border-white/10 bg-card/80 p-6 space-y-4 shadow-sm">
         <h2 className="text-lg font-semibold">Profile</h2>
         <form className="space-y-4" onSubmit={handleSaveProfile}>
           <div className="flex items-center gap-4">
@@ -263,13 +275,13 @@ export function SettingsView() {
             />
           </div>
 
-          <Button type="submit" disabled={isSavingProfile}>
+          <Button type="submit" className="rounded-full px-5" disabled={isSavingProfile}>
             {isSavingProfile ? "Saving..." : "Save profile"}
           </Button>
         </form>
       </section>
 
-      <section className="rounded-xl border p-5 space-y-4">
+      <section className="rounded-[28px] border border-white/10 bg-card/80 p-6 space-y-4 shadow-sm">
         <h2 className="text-lg font-semibold">Security</h2>
         {hasSupabasePasswordAuth ? (
           <form className="space-y-3" onSubmit={handleChangePassword}>
@@ -300,7 +312,7 @@ export function SettingsView() {
                 onChange={(e) => setPasswords((p) => ({ ...p, confirm: e.target.value }))}
               />
             </div>
-            <Button type="submit" disabled={isSavingPassword}>
+            <Button type="submit" className="rounded-full px-5" disabled={isSavingPassword}>
               {isSavingPassword ? "Updating..." : "Change password"}
             </Button>
           </form>

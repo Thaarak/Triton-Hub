@@ -169,11 +169,19 @@ export function AnnouncementView() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold tracking-tight">Recent Announcements</h2>
-                <span className="bg-secondary text-secondary-foreground text-xs font-semibold px-2.5 py-0.5 rounded-full">
+            <div className="rounded-[28px] border border-white/10 bg-card/80 p-6 shadow-sm">
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">Announcements</p>
+                        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Recent updates across your classes</h2>
+                        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
+                            Email-origin and Canvas-origin updates are grouped in one calmer view so you can read, triage, and move on.
+                        </p>
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-secondary/80 px-3 py-1 text-xs font-semibold text-secondary-foreground">
                     {announcements?.length || 0} Total
-                </span>
+                    </span>
+                </div>
             </div>
 
             {announcements && announcements.length > 0 ? (
@@ -182,14 +190,14 @@ export function AnnouncementView() {
                         <div
                             key={a.id}
                             className={cn(
-                                "group relative flex flex-col gap-2 rounded-xl border p-5 transition-colors",
-                                readIds.has(a.id) ? "opacity-65" : "hover:bg-muted/50"
+                                "group relative flex flex-col gap-3 rounded-[24px] border border-white/10 bg-card/80 p-6 shadow-sm transition-all",
+                                readIds.has(a.id) ? "opacity-65" : "hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md"
                             )}
                         >
                             <div className="flex items-center justify-between gap-4">
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <DataOriginBadge origin={a.dataOrigin} size="sm" />
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                    <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                                         {a.courseCode || a.courseName}
                                     </span>
                                     <span className="text-xs text-muted-foreground">
@@ -200,7 +208,7 @@ export function AnnouncementView() {
                                     <button
                                         onClick={() => toggleRead(a.id)}
                                         className={cn(
-                                            "inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors",
+                                            "inline-flex h-9 items-center gap-1 rounded-full px-3 text-xs font-medium transition-colors",
                                             readIds.has(a.id)
                                                 ? "bg-green-500/20 text-green-600 dark:text-green-400"
                                                 : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
@@ -218,10 +226,10 @@ export function AnnouncementView() {
                             </div>
 
                             <div>
-                                <h3 className="text-base font-semibold leading-none tracking-tight group-hover:underline decoration-primary/50 underline-offset-4 transition-all">
+                                <h3 className="text-lg font-semibold leading-tight tracking-tight text-foreground transition-all group-hover:text-primary">
                                     {a.title}
                                 </h3>
-                                <div className="text-sm text-muted-foreground mt-2 line-clamp-2 leading-relaxed">
+                                <div className="mt-2 text-sm leading-7 text-muted-foreground">
                                     {a.message}
                                 </div>
                             </div>
@@ -229,7 +237,7 @@ export function AnnouncementView() {
                     ))}
                 </div>
             ) : (
-                <div className="flex flex-col items-center justify-center h-64 border border-border rounded-xl bg-card">
+                <div className="flex h-64 flex-col items-center justify-center rounded-[28px] border border-white/10 bg-card/80">
                     <Megaphone className="h-10 w-10 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground font-medium">No announcements found!</p>
                 </div>

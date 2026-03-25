@@ -5,9 +5,76 @@ import { getNotificationSourceFilter } from "./user-preferences";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
 
+type BackendEmailItem = {
+  id: string;
+  subject: string;
+  from: string;
+  snippet: string;
+  date: string | null;
+};
+
 function getBackendSessionToken(): string | null {
   if (typeof sessionStorage === "undefined") return null;
   return sessionStorage.getItem("triton_session_token");
+}
+
+function parseFromField(from: string): string {
+  if (!from) return "Email";
+  const match = from.match(/^(.+?)\s*<.+>$/);
+  if (match) return match[1].replace(/"/g, "");
+  return from;
+}
+
+function emailIdToSyntheticNotificationId(id: string, index: number): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) {
+    hash = (hash * 31 + id.charCodeAt(i)) % 1_000_000_000;
+  }
+  return 2_000_000_000 + hash + index;
+}
+
+async function fetchInboxEmails(): Promise<BackendEmailItem[]> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/emails`, {
+      credentials: "include",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.emails) ? (data.emails as BackendEmailItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mergeRawEmailsIntoNotifications(rows: Notification[], emails: BackendEmailItem[]): Notification[] {
+  if (emails.length === 0) return rows;
+
+  const seenSummaries = new Set(rows.map((row) => row.summary.trim().toLowerCase()));
+  const merged = [...rows];
+
+  emails.forEach((email, index) => {
+    const subject = (email.subject || "(No Subject)").trim();
+    const summaryKey = subject.toLowerCase();
+    if (seenSummaries.has(summaryKey)) return;
+
+    merged.push({
+      id: emailIdToSyntheticNotificationId(email.id, index),
+      created_at: email.date || new Date().toISOString(),
+      source: parseFromField(email.from),
+      category: "announcement",
+      event_date: "EMPTY",
+      event_time: "EMPTY",
+      urgency: "medium",
+      link: "",
+      summary: subject,
+      snippet: email.snippet || "",
+      user_id: "email",
+      completed: false,
+    });
+    seenSummaries.add(summaryKey);
+  });
+
+  return merged.sort((a, b) => safeParseDate(b.created_at).getTime() - safeParseDate(a.created_at).getTime());
 }
 
 /**
@@ -46,6 +113,8 @@ export async function fetchNotifications(): Promise<Notification[]> {
       }
     }
   }
+
+  rows = mergeRawEmailsIntoNotifications(rows, await fetchInboxEmails());
 
   if (typeof window !== "undefined") {
     try {
@@ -160,7 +229,7 @@ export function transformToUpdates(notifications: Notification[]): Update[] {
       source: dataOrigin === "canvas" ? ("canvas" as const) : ("email" as const),
       category,
       title: notif.summary,
-      snippet: notif.summary,
+      snippet: notif.snippet?.trim() || notif.summary,
       timestamp,
       url: notif.link !== "EMPTY" ? notif.link : "",
       unread: true, // Default to unread
@@ -208,6 +277,7 @@ export async function createNotification(input: CreateNotificationInput): Promis
     urgency: input.urgency,
     link: input.link || "EMPTY",
     summary: input.summary,
+    completed: false,
   };
 
   if (session) {

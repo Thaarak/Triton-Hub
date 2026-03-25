@@ -167,11 +167,19 @@ export function AssignmentView() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold tracking-tight">Upcoming Assignments</h2>
-                <span className="bg-secondary text-secondary-foreground text-xs font-semibold px-2.5 py-0.5 rounded-full">
-                    {activePending.length} Pending
-                </span>
+            <div className="rounded-[28px] border border-white/10 bg-card/80 p-6 shadow-sm">
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">Assignments</p>
+                        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Upcoming work, organized by urgency</h2>
+                        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
+                            Keep active work front and center, then collapse old unchecked items into a dedicated follow-up section.
+                        </p>
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-secondary/80 px-3 py-1 text-xs font-semibold text-secondary-foreground">
+                        {activePending.length} Pending
+                    </span>
+                </div>
             </div>
 
             {assignments && assignments.length > 0 ? (
@@ -179,10 +187,10 @@ export function AssignmentView() {
                     {activePending.map((a) => {
                         const isUpdating = updating.has(a.notificationId);
                         return (
-                        <div key={a.id} className="group relative flex flex-col gap-2 rounded-xl border p-4 hover:bg-muted/50 transition-colors">
+                        <div key={a.id} className="group relative flex flex-col gap-3 rounded-[24px] border border-white/10 bg-card/80 p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md">
                             <div className="flex items-center justify-between gap-4">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                    <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">
                                         {a.courseCode}
                                     </span>
                                     <span className={cn("text-xs font-medium", !a.dueAt ? 'text-muted-foreground' : 'text-orange-600 dark:text-orange-400')}>
@@ -193,7 +201,7 @@ export function AssignmentView() {
                                     <button
                                         onClick={() => handleToggleDone(a.notificationId, a.completed)}
                                         disabled={isUpdating}
-                                        className="inline-flex h-8 items-center gap-1 rounded-md bg-secondary px-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-60"
+                                        className="inline-flex h-9 items-center gap-1 rounded-full bg-secondary px-3 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-60"
                                     >
                                         <Check className="h-3.5 w-3.5" />
                                         {isUpdating ? "Saving..." : "Done"}
@@ -207,10 +215,10 @@ export function AssignmentView() {
                             </div>
 
                             <div>
-                                <h3 className="font-semibold leading-none tracking-tight group-hover:underline decoration-primary/50 underline-offset-4 transition-all">
+                                <h3 className="text-lg font-semibold leading-tight tracking-tight text-foreground transition-all group-hover:text-primary">
                                     {a.name}
                                 </h3>
-                                <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">
+                                <p className="mt-2 text-sm leading-7 text-muted-foreground">
                                     {a.courseName}
                                 </p>
                             </div>
@@ -218,14 +226,14 @@ export function AssignmentView() {
                     )})}
 
                     {forgotToCheckOff.length > 0 && (
-                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5">
+                        <div className="rounded-[24px] border border-amber-500/30 bg-amber-500/5 shadow-sm">
                             <button
                                 onClick={() => setShowForgotSection((v) => !v)}
-                                className="w-full flex items-center justify-between px-4 py-3 text-left"
+                                className="flex w-full items-center justify-between px-5 py-4 text-left"
                             >
                                 <div>
                                     <p className="text-sm font-semibold text-foreground">Forgot to check off</p>
-                                    <p className="text-xs text-muted-foreground">
+                                    <p className="mt-1 text-xs text-muted-foreground">
                                         {forgotToCheckOff.length} overdue assignment{forgotToCheckOff.length === 1 ? "" : "s"} (2+ weeks)
                                     </p>
                                 </div>
@@ -233,11 +241,11 @@ export function AssignmentView() {
                             </button>
 
                             {showForgotSection && (
-                                <div className="px-4 pb-4 space-y-3">
+                                <div className="space-y-3 px-5 pb-5">
                                     {forgotToCheckOff.map((a) => {
                                         const isUpdating = updating.has(a.notificationId);
                                         return (
-                                            <div key={a.id} className="rounded-lg border p-3 bg-card/60">
+                                            <div key={a.id} className="rounded-2xl border border-white/10 bg-card/75 p-4">
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-medium truncate">{a.name}</p>
@@ -248,7 +256,7 @@ export function AssignmentView() {
                                                     <button
                                                         onClick={() => handleToggleDone(a.notificationId, a.completed)}
                                                         disabled={isUpdating}
-                                                        className="inline-flex h-8 items-center gap-1 rounded-md bg-secondary px-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-60"
+                                                        className="inline-flex h-9 items-center gap-1 rounded-full bg-secondary px-3 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-60"
                                                     >
                                                         <Check className="h-3.5 w-3.5" />
                                                         {isUpdating ? "Saving..." : "Done"}
@@ -263,7 +271,7 @@ export function AssignmentView() {
                     )}
                 </div>
             ) : (
-                <div className="flex flex-col items-center justify-center h-64 border border-border rounded-xl bg-card">
+                <div className="flex h-64 flex-col items-center justify-center rounded-[28px] border border-white/10 bg-card/80">
                     <CalendarIcon className="h-10 w-10 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground font-medium">No upcoming assignments found!</p>
                     <p className="text-xs text-muted-foreground mt-1">You're all caught up.</p>
