@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import { signInWithGoogle } from "@/lib/supabase-oauth";
 import { AuthShell } from "@/components/marketing/auth-shell";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
 
 export default function SignUpPage() {
     const router = useRouter();
@@ -213,7 +212,19 @@ export default function SignUpPage() {
                 <Button
                     type="button"
                     variant="outline"
-                    onClick={() => (window.location.href = `${BACKEND_URL}/auth/google`)}
+                    onClick={async () => {
+                        setError(null);
+                        setIsLoading(true);
+                        try {
+                            await signInWithGoogle();
+                        } catch (err: unknown) {
+                            setError(
+                                err instanceof Error ? err.message : "Google sign-up failed"
+                            );
+                            setIsLoading(false);
+                        }
+                    }}
+                    disabled={isLoading}
                     className="h-12 w-full rounded-2xl border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                 >
                     <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">

@@ -15,13 +15,17 @@ from sync_service import perform_full_sync
 
 google_auth = Blueprint("google_auth", __name__, url_prefix="/auth/google")
 
+_default_redirect = "http://localhost:8080/auth/google/callback"
+_oauth_redirect = os.getenv("GOOGLE_REDIRECT_URI", _default_redirect)
+
 CLIENT_CONFIG = {
     "web": {
         "client_id": os.getenv("GOOGLE_CLIENT_ID"),
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": ["http://localhost:8080/auth/google/callback"],
+        # Must match an Authorized redirect URI in Google Cloud Console (and GOOGLE_REDIRECT_URI at runtime).
+        "redirect_uris": [_oauth_redirect],
     }
 }
 
@@ -38,7 +42,7 @@ def authorize():
     flow = google_auth_oauthlib.flow.Flow.from_client_config(
         CLIENT_CONFIG, scopes=SCOPES
     )
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/auth/google/callback")
+    redirect_uri = _oauth_redirect
     flow.redirect_uri = redirect_uri
 
     print(f"DEBUG: Redirecting to Google with URI: {redirect_uri}")
@@ -59,7 +63,7 @@ def callback():
     flow = google_auth_oauthlib.flow.Flow.from_client_config(
         CLIENT_CONFIG, scopes=SCOPES, state=state
     )
-    flow.redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/auth/google/callback")
+    flow.redirect_uri = _oauth_redirect
 
     flow.fetch_token(authorization_response=request.url)
 
