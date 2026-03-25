@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { CanvasSetupGuard } from "@/components/canvas-setup-guard";
 import { CanvasIntegration } from "@/components/dashboard/canvas-integration";
 import { Navbar } from "@/components/dashboard/navbar";
 import { Sidebar } from "@/components/dashboard/sidebar";
@@ -98,14 +99,16 @@ function HomePageContent() {
 
 export default function HomePage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-        </div>
-      }
-    >
-      <HomePageContent />
-    </Suspense>
+    <CanvasSetupGuard>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-background flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        }
+      >
+        <HomePageContent />
+      </Suspense>
+    </CanvasSetupGuard>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { fetchAndTransformNotifications } from "@/lib/notifications";
 import type { Update, Category } from "@/lib/types";
+import { CanvasSetupGuard } from "@/components/canvas-setup-guard";
 import { Navbar } from "./navbar";
 import { Sidebar } from "./sidebar";
 import { UpdateCard } from "./update-card";
@@ -52,6 +53,7 @@ export function CategoryFeed({ category, title, description }: CategoryFeedProps
   const unreadCount = updates.filter((u) => u.unread).length;
 
   return (
+    <CanvasSetupGuard>
     <div className="min-h-screen bg-background">
       <Navbar />
       <Sidebar />
@@ -130,5 +132,6 @@ export function CategoryFeed({ category, title, description }: CategoryFeedProps
         </div>
       </main>
     </div>
+    </CanvasSetupGuard>
   );
 }

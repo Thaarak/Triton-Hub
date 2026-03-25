@@ -1,5 +1,6 @@
 "use client";
 
+import { CanvasSetupGuard } from "@/components/canvas-setup-guard";
 import { Navbar } from "@/components/dashboard/navbar";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { StatsSidebar } from "@/components/dashboard/stats-sidebar";
@@ -7,6 +8,7 @@ import { SettingsView } from "@/components/dashboard/settings-view";
 
 export default function SettingsPage() {
   return (
+    <CanvasSetupGuard>
     <div className="min-h-screen bg-background">
       <Navbar />
       <Sidebar />
@@ -17,5 +19,6 @@ export default function SettingsPage() {
         </div>
       </main>
     </div>
+    </CanvasSetupGuard>
   );
 }

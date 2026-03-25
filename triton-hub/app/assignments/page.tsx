@@ -1,5 +1,6 @@
 "use client";
 
+import { CanvasSetupGuard } from "@/components/canvas-setup-guard";
 import { AssignmentView } from "@/components/dashboard/assignment-view";
 import { Navbar } from "@/components/dashboard/navbar";
 import { Sidebar } from "@/components/dashboard/sidebar";
@@ -7,6 +8,7 @@ import { StatsSidebar } from "@/components/dashboard/stats-sidebar";
 
 export default function AssignmentsPage() {
   return (
+    <CanvasSetupGuard>
     <div className="min-h-screen bg-background">
       <Navbar />
       <Sidebar />
@@ -17,5 +19,6 @@ export default function AssignmentsPage() {
         </div>
       </main>
     </div>
+    </CanvasSetupGuard>
   );
 }

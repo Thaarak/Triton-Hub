@@ -1,5 +1,6 @@
 "use client";
 
+import { CanvasSetupGuard } from "@/components/canvas-setup-guard";
 import { Navbar } from "@/components/dashboard/navbar";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { CalendarView } from "@/components/dashboard/calendar-view";
@@ -7,6 +8,7 @@ import { StatsSidebar } from "@/components/dashboard/stats-sidebar";
 
 export default function CalendarPage() {
   return (
+    <CanvasSetupGuard>
     <div className="min-h-screen bg-background">
       <Navbar />
       <Sidebar />
@@ -26,5 +28,6 @@ export default function CalendarPage() {
         </div>
       </main>
     </div>
+    </CanvasSetupGuard>
   );
 }
