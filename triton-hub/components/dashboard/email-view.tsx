@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, Mail, ExternalLink, RefreshCw, AlertCircle, Check, Eye } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { fetchInboxEmailsFromApi } from "@/lib/notifications";
 
 const READ_EMAILS_KEY = "triton_read_emails";
 
@@ -49,21 +50,11 @@ export function EmailView() {
         setError(null);
 
         try {
-            const res = await fetch("/api/emails", {
-                credentials: "include",
-            });
+            const { emails: emailList, error: apiErr, message: apiMessage } =
+                await fetchInboxEmailsFromApi();
 
-            if (!res.ok) {
-                if (res.status === 401) {
-                    throw new Error("Please sign in with Google to view emails");
-                }
-                throw new Error(`Failed to fetch emails: ${res.status}`);
-            }
-
-            const data = await res.json();
-            const emailList = Array.isArray(data.emails) ? data.emails : [];
-            if (emailList.length === 0 && data.error && typeof data.message === "string") {
-                setError(data.message);
+            if (emailList.length === 0 && apiErr && typeof apiMessage === "string") {
+                setError(apiMessage);
                 setEmails([]);
                 return;
             }

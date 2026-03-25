@@ -10,6 +10,11 @@ type GmailMessage = {
   payload?: { headers?: { name: string; value: string }[] };
 };
 
+type ClientTokens = {
+  provider_token?: string | null;
+  provider_refresh_token?: string | null;
+};
+
 function headerFromPayload(msg: GmailMessage, name: string): string {
   const headers = msg.payload?.headers;
   if (!headers) return "";
@@ -83,7 +88,26 @@ type EmailRow = {
   date: string | null;
 };
 
-export async function GET() {
+async function parseClientTokens(request: Request): Promise<ClientTokens | null> {
+  if (request.method !== "POST") return null;
+  try {
+    const json = (await request.json()) as Record<string, unknown>;
+    return {
+      provider_token:
+        typeof json.provider_token === "string" ? json.provider_token : null,
+      provider_refresh_token:
+        typeof json.provider_refresh_token === "string"
+          ? json.provider_refresh_token
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function handleEmails(request: Request) {
+  const clientTokens = await parseClientTokens(request);
+
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -115,8 +139,15 @@ export async function GET() {
     return NextResponse.json({ emails: [] }, { status: 401 });
   }
 
-  let accessToken = session.provider_token ?? null;
-  const sessionRefresh = session.provider_refresh_token ?? null;
+  const clientPt = clientTokens?.provider_token?.trim() || null;
+  const clientRt = clientTokens?.provider_refresh_token?.trim() || null;
+
+  let accessToken =
+    clientPt || (session.provider_token && session.provider_token.trim()) || null;
+  const sessionRefresh =
+    clientRt ||
+    (session.provider_refresh_token && session.provider_refresh_token.trim()) ||
+    null;
 
   if (!accessToken && sessionRefresh) {
     accessToken = await refreshGoogleAccessToken(sessionRefresh);
@@ -175,4 +206,12 @@ export async function GET() {
   }
 
   return NextResponse.json({ emails: result.emails });
+}
+
+export async function GET() {
+  return handleEmails(new Request("http://localhost", { method: "GET" }));
+}
+
+export async function POST(request: Request) {
+  return handleEmails(request);
 }

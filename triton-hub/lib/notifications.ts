@@ -13,6 +13,55 @@ type BackendEmailItem = {
   date: string | null;
 };
 
+export type InboxEmailFetchResult = {
+  emails: BackendEmailItem[];
+  error?: string;
+  message?: string;
+};
+
+/**
+ * Loads inbox via POST /api/emails with Google tokens from the browser session.
+ * Server cookie session often omits provider_token; the client must send it.
+ */
+export async function fetchInboxEmailsFromApi(): Promise<InboxEmailFetchResult> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const res = await fetch("/api/emails", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider_token: session?.provider_token ?? null,
+        provider_refresh_token: session?.provider_refresh_token ?? null,
+      }),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        return {
+          emails: [],
+          error: "unauthorized",
+          message: "Please sign in with Google to view emails",
+        };
+      }
+      return { emails: [] };
+    }
+    const data = (await res.json()) as {
+      emails?: unknown;
+      error?: string;
+      message?: string;
+    };
+    return {
+      emails: Array.isArray(data.emails) ? (data.emails as BackendEmailItem[]) : [],
+      error: typeof data.error === "string" ? data.error : undefined,
+      message: typeof data.message === "string" ? data.message : undefined,
+    };
+  } catch {
+    return { emails: [] };
+  }
+}
+
 function getBackendSessionToken(): string | null {
   if (typeof sessionStorage === "undefined") return null;
   return sessionStorage.getItem("triton_session_token");
@@ -33,23 +82,12 @@ function emailIdToSyntheticNotificationId(id: string, index: number): number {
   return 2_000_000_000 + hash + index;
 }
 
-async function fetchInboxEmails(): Promise<BackendEmailItem[]> {
-  try {
-    const res = await fetch("/api/emails", {
-      credentials: "include",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data?.emails) ? (data.emails as BackendEmailItem[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 function mergeRawEmailsIntoNotifications(rows: Notification[], emails: BackendEmailItem[]): Notification[] {
   if (emails.length === 0) return rows;
 
-  const seenSummaries = new Set(rows.map((row) => row.summary.trim().toLowerCase()));
+  const seenSummaries = new Set(
+    rows.map((row) => (row.summary ?? "").trim().toLowerCase())
+  );
   const merged = [...rows];
 
   emails.forEach((email, index) => {
@@ -114,7 +152,10 @@ export async function fetchNotifications(): Promise<Notification[]> {
     }
   }
 
-  rows = mergeRawEmailsIntoNotifications(rows, await fetchInboxEmails());
+  rows = mergeRawEmailsIntoNotifications(
+    rows,
+    (await fetchInboxEmailsFromApi()).emails
+  );
 
   if (typeof window !== "undefined") {
     try {

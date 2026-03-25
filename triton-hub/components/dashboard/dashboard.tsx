@@ -60,7 +60,7 @@ export function Dashboard() {
 
       if (session) {
         await hydrateCanvasTokenFromSupabase(session.user.id);
-        void syncGmailRefreshTokenToProfile();
+        await syncGmailRefreshTokenToProfile();
       }
 
       const notificationUpdates = await fetchAndTransformNotifications();

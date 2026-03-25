@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Megaphone, ExternalLink, Check } from "lucide-react";
-import { fetchNotifications } from "@/lib/notifications";
+import { fetchInboxEmailsFromApi, fetchNotifications } from "@/lib/notifications";
 import { format } from "date-fns";
 import type { Notification } from "@/lib/types";
 import type { DataOrigin } from "@/lib/notification-origin";
@@ -19,14 +19,6 @@ interface AnnouncementItem {
     courseCode?: string;
     htmlUrl: string;
     dataOrigin: DataOrigin;
-}
-
-interface BackendEmailItem {
-    id: string;
-    subject: string;
-    from: string;
-    snippet: string;
-    date: string | null;
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
@@ -77,30 +69,24 @@ export function AnnouncementView() {
                 // Also merge inbox emails so users can immediately see email-origin updates
                 // even before the Gmail->notifications pipeline has inserted DB rows.
                 try {
-                    const emailRes = await fetch("/api/emails", {
-                        credentials: "include",
-                    });
-                    if (emailRes.ok) {
-                        const emailData = await emailRes.json();
-                        const emailList = Array.isArray(emailData?.emails) ? (emailData.emails as BackendEmailItem[]) : [];
-                        const emailItems: AnnouncementItem[] = emailList.map((e) => ({
-                            id: `email-${e.id}`,
-                            title: e.subject || "(No Subject)",
-                            message: e.snippet || "",
-                            postedAt: e.date,
-                            courseName: parseFromField(e.from),
-                            courseCode: "EMAIL",
-                            htmlUrl: "",
-                            dataOrigin: "email",
-                        }));
+                    const { emails: emailList } = await fetchInboxEmailsFromApi();
+                    const emailItems: AnnouncementItem[] = emailList.map((e) => ({
+                        id: `email-${e.id}`,
+                        title: e.subject || "(No Subject)",
+                        message: e.snippet || "",
+                        postedAt: e.date,
+                        courseName: parseFromField(e.from),
+                        courseCode: "EMAIL",
+                        htmlUrl: "",
+                        dataOrigin: "email",
+                    }));
 
-                        const seenTitles = new Set(items.map((i) => i.title.trim().toLowerCase()));
-                        for (const emailItem of emailItems) {
-                            const k = emailItem.title.trim().toLowerCase();
-                            if (!seenTitles.has(k)) {
-                                items.push(emailItem);
-                                seenTitles.add(k);
-                            }
+                    const seenTitles = new Set(items.map((i) => i.title.trim().toLowerCase()));
+                    for (const emailItem of emailItems) {
+                        const k = emailItem.title.trim().toLowerCase();
+                        if (!seenTitles.has(k)) {
+                            items.push(emailItem);
+                            seenTitles.add(k);
                         }
                     }
                 } catch {
