@@ -1,6 +1,17 @@
 import { supabase } from "@/lib/supabase";
 
 /**
+ * Public URL of the Next app (no trailing slash). Set on Vercel to your production
+ * domain so OAuth never falls back to Supabase "Site URL" when it is still localhost.
+ */
+function getOAuthRedirectOrigin(): string {
+  if (typeof window === "undefined") return "";
+  const fromEnv = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  return window.location.origin;
+}
+
+/**
  * Start the Google OAuth flow via Supabase Auth (no separate backend required).
  * Configure the Google provider + redirect URLs in the Supabase dashboard.
  *
@@ -8,8 +19,7 @@ import { supabase } from "@/lib/supabase";
  * do not call window.location again (that can duplicate navigation).
  */
 export async function signInWithGoogle(): Promise<void> {
-  const origin =
-    typeof window !== "undefined" ? window.location.origin : "";
+  const origin = getOAuthRedirectOrigin();
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
