@@ -77,7 +77,7 @@ export function AnnouncementView() {
                 // Also merge inbox emails so users can immediately see email-origin updates
                 // even before the Gmail->notifications pipeline has inserted DB rows.
                 try {
-                    const emailRes = await fetch(`${BACKEND_URL}/api/emails`, {
+                    const emailRes = await fetch("/api/emails", {
                         credentials: "include",
                     });
                     if (emailRes.ok) {

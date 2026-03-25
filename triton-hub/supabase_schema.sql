@@ -4,6 +4,7 @@ create table public.profiles (
   full_name text,
   email text unique not null,
   canvas_token text,
+  google_refresh_token text,
   updated_at timestamp with time zone default now()
 );
 

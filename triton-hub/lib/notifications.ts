@@ -35,7 +35,7 @@ function emailIdToSyntheticNotificationId(id: string, index: number): number {
 
 async function fetchInboxEmails(): Promise<BackendEmailItem[]> {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/emails`, {
+    const res = await fetch("/api/emails", {
       credentials: "include",
     });
     if (!res.ok) return [];

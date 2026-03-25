@@ -6,6 +6,9 @@ import { supabase } from "@/lib/supabase";
  *
  * Supabase must allow `redirect_to`: add `${origin}/auth/callback` under Authentication → Redirect URLs
  * and set Site URL to the same production origin.
+ *
+ * For Gmail in the dashboard: Authentication → Providers → Google → add scope
+ * https://www.googleapis.com/auth/gmail.readonly (matches signInWithOAuth scopes below).
  */
 function getOAuthRedirectOrigin(): string {
   if (typeof window === "undefined") return "";
@@ -27,6 +30,12 @@ export async function signInWithGoogle(): Promise<void> {
     provider: "google",
     options: {
       redirectTo: `${origin}/auth/callback`,
+      scopes:
+        "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+      queryParams: {
+        access_type: "offline",
+        prompt: "consent",
+      },
     },
   });
   if (error) throw error;

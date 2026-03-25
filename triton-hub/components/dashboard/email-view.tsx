@@ -5,7 +5,6 @@ import { Loader2, Mail, ExternalLink, RefreshCw, AlertCircle, Check, Eye } from 
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
 const READ_EMAILS_KEY = "triton_read_emails";
 
 interface EmailItem {
@@ -50,7 +49,7 @@ export function EmailView() {
         setError(null);
 
         try {
-            const res = await fetch(`${BACKEND_URL}/api/emails`, {
+            const res = await fetch("/api/emails", {
                 credentials: "include",
             });
 
@@ -62,7 +61,12 @@ export function EmailView() {
             }
 
             const data = await res.json();
-            const emailList = data.emails || [];
+            const emailList = Array.isArray(data.emails) ? data.emails : [];
+            if (emailList.length === 0 && data.error && typeof data.message === "string") {
+                setError(data.message);
+                setEmails([]);
+                return;
+            }
             const now = new Date();
             const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
