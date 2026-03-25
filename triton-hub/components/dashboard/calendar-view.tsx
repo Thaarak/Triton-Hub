@@ -2,10 +2,12 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from "date-fns";
-import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList, Calendar, Loader2, Check, Circle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Megaphone, User, FileText, GraduationCap, ClipboardList, Calendar, Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { fetchNotifications, updateNotificationCompleted } from "@/lib/notifications";
+import { getNotificationDataOrigin } from "@/lib/notification-origin";
+import { DataOriginBadge } from "@/components/dashboard/data-origin-badge";
 import { toast } from "sonner";
 import type { Notification } from "@/lib/types";
 import { AddEventModal } from "./add-event-modal";
@@ -103,24 +105,27 @@ function mapUrgency(urgency: string): Urgency {
   return "low";
 }
 
+const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+
 export function CalendarView() {
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  /** Assignments only (no announcements on calendar). */
+  const [assignmentEvents, setAssignmentEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingEvents, setUpdatingEvents] = useState<Set<number>>(new Set());
 
   // UI State
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
-  const [filterType, setFilterType] = useState<EventType | "all">("all");
   const [filterUrgency, setFilterUrgency] = useState<Urgency | "all">("all");
 
   // Toggle event completion
   const handleToggleComplete = useCallback(async (notificationId: number, currentCompleted: boolean) => {
     setUpdatingEvents((prev) => new Set(prev).add(notificationId));
     try {
-      await updateNotificationCompleted(notificationId, !currentCompleted);
-      // Update local state
-      setEvents((prev) =>
+      if (notificationId >= 0) {
+        await updateNotificationCompleted(notificationId, !currentCompleted);
+      }
+      setAssignmentEvents((prev) =>
         prev.map((event) =>
           event.notificationId === notificationId
             ? { ...event, completed: !currentCompleted }
@@ -146,7 +151,11 @@ export function CalendarView() {
     try {
       const notifications = await fetchNotifications();
 
-      const calendarEvents: CalendarEvent[] = notifications.map((notif: Notification) => {
+      const assignmentNotifs = notifications.filter(
+        (n: Notification) => n.category === "assignment"
+      );
+
+      const calendarEvents: CalendarEvent[] = assignmentNotifs.map((notif: Notification) => {
         const date = parseNotificationDate(notif.event_date, notif.event_time, notif.created_at);
         const eventType = mapCategoryToEventType(notif.category);
         const urgency = mapUrgency(notif.urgency);
@@ -167,12 +176,13 @@ export function CalendarView() {
           type: eventType,
           urgency,
           course: notif.source,
+          dataOrigin: getNotificationDataOrigin(notif),
           link: notif.link !== "EMPTY" ? notif.link : undefined,
           completed: notif.completed ?? false,
         };
       });
 
-      setEvents(calendarEvents);
+      setAssignmentEvents(calendarEvents);
     } catch (error) {
       console.error("Failed to fetch calendar events:", error);
     } finally {
@@ -195,13 +205,38 @@ export function CalendarView() {
   // Get the day of week for the first day (0 = Sunday)
   const startDayOfWeek = startOfMonth(currentMonth).getDay();
 
+  /** Incomplete assignments due more than 2 weeks ago — not shown on the grid. */
+  const forgotToCheckOff = useMemo(() => {
+    const now = Date.now();
+    return assignmentEvents.filter((e) => {
+      if (e.completed) return false;
+      const t = e.date.getTime();
+      if (Number.isNaN(t)) return false;
+      return now - t > TWO_WEEKS_MS;
+    });
+  }, [assignmentEvents]);
+
+  const forgotIds = useMemo(() => new Set(forgotToCheckOff.map((e) => e.id)), [forgotToCheckOff]);
+
+  const onCalendarEvents = useMemo(
+    () => assignmentEvents.filter((e) => !forgotIds.has(e.id)),
+    [assignmentEvents, forgotIds]
+  );
+
   const filteredEvents = useMemo(() => {
-    return events.filter((event) => {
-      if (filterType !== "all" && event.type !== filterType) return false;
+    return onCalendarEvents.filter((event) => {
       if (filterUrgency !== "all" && event.urgency !== filterUrgency) return false;
       return true;
     });
-  }, [filterType, filterUrgency, events]);
+  }, [filterUrgency, onCalendarEvents]);
+
+  const filteredForgotToCheckOff = useMemo(() => {
+    const list =
+      filterUrgency === "all"
+        ? forgotToCheckOff
+        : forgotToCheckOff.filter((e) => e.urgency === filterUrgency);
+    return [...list].sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [forgotToCheckOff, filterUrgency]);
 
   const getEventsForDay = (day: Date) => {
     return filteredEvents.filter((event) => isSameDay(event.date, day));
@@ -252,34 +287,9 @@ export function CalendarView() {
 
         {/* Filters */}
         <div className="flex flex-wrap gap-4 mb-6">
-          {/* Type Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Type:</span>
-            <div className="flex gap-1">
-              <Button
-                variant={filterType === "all" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setFilterType("all")}
-              >
-                All
-              </Button>
-              {(Object.keys(eventTypeLabels) as EventType[]).map((type) => {
-                const Icon = eventTypeIcons[type];
-                return (
-                  <Button
-                    key={type}
-                    variant={filterType === type ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => setFilterType(type)}
-                    className="gap-1"
-                  >
-                    <Icon className={cn("h-3 w-3", eventTypeColors[type].text)} />
-                    <span className="hidden sm:inline">{eventTypeLabels[type]}</span>
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground w-full sm:w-auto sm:mr-2">
+            Showing <span className="font-medium text-foreground">assignments</span> only. Announcements stay on the Announcements page.
+          </p>
 
           {/* Urgency Filter */}
           <div className="flex items-center gap-2">
@@ -367,6 +377,13 @@ export function CalendarView() {
                           event.completed && "opacity-50 line-through"
                         )}
                       >
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full inline-block mr-0.5 align-middle shrink-0",
+                            event.dataOrigin === "canvas" ? "bg-orange-500" : "bg-blue-500"
+                          )}
+                          title={event.dataOrigin === "canvas" ? "Canvas (live)" : "Email / inbox"}
+                        />
                         <span className={cn("h-1.5 w-1.5 rounded-full inline-block mr-1", urgencyColors[event.urgency].dot)} />
                         {event.title}
                       </div>
@@ -386,18 +403,13 @@ export function CalendarView() {
         {/* Legend */}
         <div className="mt-4 flex flex-wrap gap-6">
           <div>
-            <p className="text-sm font-medium text-muted-foreground mb-2">Event Types</p>
+            <p className="text-sm font-medium text-muted-foreground mb-2">Event type</p>
             <div className="flex flex-wrap gap-3">
-              {(Object.keys(eventTypeLabels) as EventType[]).map((type) => {
-                const Icon = eventTypeIcons[type];
-                return (
-                  <div key={type} className="flex items-center gap-1.5">
-                    <div className={cn("w-3 h-3 rounded border-l-2", eventTypeColors[type].bg, eventTypeColors[type].border)} />
-                    <Icon className={cn("h-3 w-3", eventTypeColors[type].text)} />
-                    <span className="text-xs text-muted-foreground">{eventTypeLabels[type]}</span>
-                  </div>
-                );
-              })}
+              <div className="flex items-center gap-1.5">
+                <div className={cn("w-3 h-3 rounded border-l-2", eventTypeColors.assignment.bg, eventTypeColors.assignment.border)} />
+                <ClipboardList className={cn("h-3 w-3", eventTypeColors.assignment.text)} />
+                <span className="text-xs text-muted-foreground">{eventTypeLabels.assignment}</span>
+              </div>
             </div>
           </div>
           <div>
@@ -409,6 +421,19 @@ export function CalendarView() {
                   <span className="text-xs text-muted-foreground">{urgencyLabels[urgency]}</span>
                 </div>
               ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-2">Source</p>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                <span className="text-xs text-muted-foreground">Email / inbox sync</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-orange-500" />
+                <span className="text-xs text-muted-foreground">Canvas (live)</span>
+              </div>
             </div>
           </div>
         </div>
@@ -444,7 +469,7 @@ export function CalendarView() {
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
                         <button
                           onClick={() => handleToggleComplete(event.notificationId, event.completed)}
                           disabled={isUpdating}
@@ -468,6 +493,7 @@ export function CalendarView() {
                         )}>
                           {event.title}
                         </span>
+                        <DataOriginBadge origin={event.dataOrigin} size="sm" />
                       </div>
                       <span className={cn("h-2 w-2 rounded-full shrink-0 mt-1.5", urgencyColors[event.urgency].dot)} />
                     </div>
@@ -510,6 +536,61 @@ export function CalendarView() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {filteredForgotToCheckOff.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-border">
+              <h4 className="text-sm font-semibold text-foreground mb-1">Forgot to check off?</h4>
+              <p className="text-xs text-muted-foreground mb-4">
+                These assignments were due more than two weeks ago and are still incomplete. They are hidden from the month grid so recent work stays visible.
+              </p>
+              <div className="space-y-3">
+                {filteredForgotToCheckOff.map((event) => {
+                  const Icon = eventTypeIcons[event.type];
+                  const isUpdating = updatingEvents.has(event.notificationId);
+                  return (
+                    <div
+                      key={event.id}
+                      className={cn(
+                        "p-3 rounded-lg border-l-4 transition-opacity border-amber-500/40 bg-amber-500/5",
+                        eventTypeColors[event.type].bg,
+                        eventTypeColors[event.type].border
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                          <button
+                            onClick={() => handleToggleComplete(event.notificationId, event.completed)}
+                            disabled={isUpdating}
+                            className={cn(
+                              "h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                              event.completed
+                                ? "bg-green-500 border-green-500 text-white"
+                                : "border-muted-foreground/50 hover:border-green-500"
+                            )}
+                          >
+                            {isUpdating ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : event.completed ? (
+                              <Check className="h-3 w-3" />
+                            ) : null}
+                          </button>
+                          <Icon className={cn("h-4 w-4 shrink-0", eventTypeColors[event.type].text)} />
+                          <span className="font-medium text-sm">{event.title}</span>
+                          <DataOriginBadge origin={event.dataOrigin} size="sm" />
+                        </div>
+                      </div>
+                      {event.course && (
+                        <p className="text-xs text-muted-foreground mt-1 ml-12">{event.course}</p>
+                      )}
+                      <p className="text-xs text-amber-600/90 dark:text-amber-400/90 mt-1 ml-12">
+                        Was due {format(event.date, "MMM d, yyyy")}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

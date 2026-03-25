@@ -1,13 +1,22 @@
 import { supabase } from "./supabase";
 import type { Update, Category, Notification } from "./types";
+import { getNotificationDataOrigin } from "./notification-origin";
+import { getNotificationSourceFilter } from "./user-preferences";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+
+function getBackendSessionToken(): string | null {
+  if (typeof sessionStorage === "undefined") return null;
+  return sessionStorage.getItem("triton_session_token");
+}
 
 /**
  * Fetch notifications for the current authenticated user.
  * Uses Supabase session when signed in with email/password, or backend session token when signed in with Google OAuth.
  */
 export async function fetchNotifications(): Promise<Notification[]> {
+  let rows: Notification[] = [];
+
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
     const { data, error } = await supabase
@@ -20,26 +29,42 @@ export async function fetchNotifications(): Promise<Notification[]> {
       console.error("Error fetching notifications:", error);
       throw error;
     }
-    return data || [];
-  }
-
-  // Google OAuth: no Supabase session; use backend session token
-  const backendToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("triton_session_token") : null;
-  if (backendToken) {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/profile/notifications`, {
-        headers: { Authorization: `Bearer ${backendToken}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return Array.isArray(data) ? data : [];
+    rows = data || [];
+  } else {
+    const backendToken = getBackendSessionToken();
+    if (backendToken) {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/profile/notifications`, {
+          headers: { Authorization: `Bearer ${backendToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          rows = Array.isArray(data) ? data : [];
+        }
+      } catch (e) {
+        console.error("Error fetching notifications from backend:", e);
       }
-    } catch (e) {
-      console.error("Error fetching notifications from backend:", e);
     }
   }
 
-  return [];
+  if (typeof window !== "undefined") {
+    try {
+      const { fetchCanvasMergeNotifications, mergeNotificationsDedupe } = await import("./canvas-feed");
+      const canvas = await fetchCanvasMergeNotifications();
+      const merged = mergeNotificationsDedupe(rows, canvas);
+      return applySourceFilter(merged);
+    } catch {
+      return applySourceFilter(rows);
+    }
+  }
+
+  return rows;
+}
+
+function applySourceFilter(rows: Notification[]): Notification[] {
+  const sourceFilter = getNotificationSourceFilter();
+  if (sourceFilter === "both") return rows;
+  return rows.filter((n) => getNotificationDataOrigin(n) === sourceFilter);
 }
 
 /**
@@ -128,9 +153,11 @@ export function transformToUpdates(notifications: Notification[]): Update[] {
       (eventDateTime.getTime() - now.getTime() < 86400000 * 2) &&
       (eventDateTime.getTime() > now.getTime());
 
+    const dataOrigin = getNotificationDataOrigin(notif);
     return {
       id: `notif-${notif.id}`,
-      source: "canvas" as const, // Default source, can be enhanced later
+      // Filter + badge: live Canvas API vs inbox / DB (Gmail pipeline, manual events)
+      source: dataOrigin === "canvas" ? ("canvas" as const) : ("email" as const),
       category,
       title: notif.summary,
       snippet: notif.summary,
@@ -140,7 +167,7 @@ export function transformToUpdates(notifications: Notification[]): Update[] {
       priority: isUrgentByDate ? "urgent" : priority,
       course: notif.source, // Use source field as course name
       dueDate: eventDateTime || undefined,
-      isCompleted: false, // Default to not completed
+      isCompleted: notif.completed ?? false,
     };
   });
 }
@@ -173,16 +200,7 @@ export type CreateNotificationInput = {
 export async function createNotification(input: CreateNotificationInput): Promise<Notification> {
   const { data: { session } } = await supabase.auth.getSession();
 
-  if (!session) {
-    console.error("No Supabase session found. User must be logged in.");
-    throw new Error("You must be logged in to create an event");
-  }
-
-  console.log("Creating notification for user:", session.user.id);
-  console.log("Notification data:", input);
-
   const insertData = {
-    user_id: session.user.id,
     source: input.source,
     category: input.category,
     event_date: input.event_date || "EMPTY",
@@ -192,24 +210,37 @@ export async function createNotification(input: CreateNotificationInput): Promis
     summary: input.summary,
   };
 
-  console.log("Inserting into Supabase:", insertData);
+  if (session) {
+    const { data, error } = await supabase
+      .from("notifications")
+      .insert({ ...insertData, user_id: session.user.id })
+      .select()
+      .single();
 
-  const { data, error } = await supabase
-    .from("notifications")
-    .insert(insertData)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Supabase insert error:", error);
-    console.error("Error code:", error.code);
-    console.error("Error message:", error.message);
-    console.error("Error details:", error.details);
-    throw new Error(`Failed to create event: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to create event: ${error.message}`);
+    }
+    return data as Notification;
   }
 
-  console.log("Successfully created notification:", data);
-  return data;
+  const backendToken = getBackendSessionToken();
+  if (backendToken) {
+    const res = await fetch(`${BACKEND_URL}/api/profile/notifications`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${backendToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(insertData),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Failed to create event");
+    }
+    return (await res.json()) as Notification;
+  }
+
+  throw new Error("You must be logged in to create an event");
 }
 
 /**
@@ -222,22 +253,37 @@ export async function updateNotificationCompleted(
 ): Promise<Notification> {
   const { data: { session } } = await supabase.auth.getSession();
 
-  if (!session) {
-    throw new Error("You must be logged in to update an event");
+  if (session) {
+    const { data, error } = await supabase
+      .from("notifications")
+      .update({ completed })
+      .eq("id", notificationId)
+      .eq("user_id", session.user.id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update event: ${error.message}`);
+    }
+    return data as Notification;
   }
 
-  const { data, error } = await supabase
-    .from("notifications")
-    .update({ completed })
-    .eq("id", notificationId)
-    .eq("user_id", session.user.id) // Ensure user can only update their own
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Supabase update error:", error);
-    throw new Error(`Failed to update event: ${error.message}`);
+  const backendToken = getBackendSessionToken();
+  if (backendToken) {
+    const res = await fetch(`${BACKEND_URL}/api/profile/notifications`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${backendToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id: notificationId, completed }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Failed to update event");
+    }
+    return (await res.json()) as Notification;
   }
 
-  return data;
+  throw new Error("You must be logged in to update an event");
 }

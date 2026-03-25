@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { getLocalAvatarUrl, getLocalDisplayName } from "@/lib/user-preferences";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,10 +27,41 @@ import {
 export function Navbar() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [displayName, setDisplayName] = useState("Triton Student");
+  const [avatarUrl, setAvatarUrl] = useState("/avatar.png");
+  const router = useRouter();
 
-  useState(() => {
+  useEffect(() => {
     setMounted(true);
-  });
+    const localName = getLocalDisplayName();
+    const localAvatar = getLocalAvatarUrl();
+    if (localName.trim()) setDisplayName(localName.trim());
+    if (localAvatar.trim()) setAvatarUrl(localAvatar.trim());
+
+    const loadFromSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const metaName =
+          (session.user.user_metadata?.full_name as string | undefined) ||
+          (session.user.user_metadata?.name as string | undefined) ||
+          "";
+        const metaAvatar = (session.user.user_metadata?.avatar_url as string | undefined) || "";
+        if (metaName.trim()) setDisplayName(metaName.trim());
+        if (metaAvatar.trim()) setAvatarUrl(metaAvatar.trim());
+      }
+    };
+    loadFromSession();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem("triton_session_token");
+      sessionStorage.removeItem("canvas_token");
+      sessionStorage.removeItem("canvas_url");
+    }
+    router.push("/login");
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
@@ -63,8 +97,12 @@ export function Navbar() {
             size="icon"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="text-muted-foreground hover:text-foreground"
+            aria-label="Toggle theme"
+            suppressHydrationWarning
           >
-            {mounted && theme === "dark" ? (
+            {!mounted ? (
+              <Moon className="h-5 w-5 opacity-0" aria-hidden />
+            ) : theme === "dark" ? (
               <Sun className="h-5 w-5" />
             ) : (
               <Moon className="h-5 w-5" />
@@ -82,13 +120,17 @@ export function Navbar() {
                 className="flex items-center gap-2 pl-2 pr-1"
               >
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/avatar.png" alt="Student" />
+                  <AvatarImage src={avatarUrl} alt={displayName} />
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                    TC
+                    {displayName
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((p) => p[0]?.toUpperCase() || "")
+                      .join("") || "TS"}
                   </AvatarFallback>
                 </Avatar>
                 <span className="hidden text-sm font-medium md:block">
-                  Triton Student
+                  {displayName}
                 </span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -100,12 +142,12 @@ export function Navbar() {
                 <User className="mr-2 h-4 w-4" />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => router.push("/settings")}>
                 <Settings className="mr-2 h-4 w-4" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">
+              <DropdownMenuItem className="text-destructive" onSelect={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Log out
               </DropdownMenuItem>

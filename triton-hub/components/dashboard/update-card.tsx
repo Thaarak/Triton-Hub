@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { Update } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DataOriginBadge } from "./data-origin-badge";
 import {
   BookOpen,
   Mail,
@@ -68,7 +69,7 @@ function isValidDate(date: Date | undefined | null): date is Date {
 
 export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const config = sourceConfig[update.source];
+  const config = sourceConfig[update.source] ?? sourceConfig.email;
   const catConfig = categoryConfig[update.category as keyof typeof categoryConfig];
   const Icon = config.icon;
 
@@ -108,9 +109,17 @@ export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
         {/* Content */}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 mb-1">
-            <Badge variant="outline" className={cn("text-xs font-bold", update.isCompleted ? "bg-green-500/15 text-green-600 border-green-500/30" : config.className)}>
-              {config.label}
-            </Badge>
+            {update.source === "piazza" ? (
+              <Badge variant="outline" className={cn("text-xs font-bold", update.isCompleted ? "bg-green-500/15 text-green-600 border-green-500/30" : config.className)}>
+                {config.label}
+              </Badge>
+            ) : update.isCompleted ? (
+              <Badge variant="outline" className="text-xs font-bold bg-green-500/15 text-green-600 border-green-500/30">
+                {config.label}
+              </Badge>
+            ) : (
+              <DataOriginBadge origin={update.source === "canvas" ? "canvas" : "email"} />
+            )}
             {update.subCategory && !update.isCompleted && (
               <Badge
                 variant="outline"

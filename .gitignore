@@ -13,6 +13,11 @@ dist-ssr
 *.local
 .env
 
+# Python / Flask runtime artifacts
+**/.flask_session/
+**/__pycache__/
+**/*.pyc
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

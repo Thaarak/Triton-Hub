@@ -24,7 +24,7 @@ const navItems = [
   { icon: ClipboardList, label: "Assignments", href: "/assignments" },
   { icon: CalendarDays, label: "Events", href: "/events" },
   { icon: Calendar, label: "Calendar", href: "/calendar" },
-  { icon: Settings, label: "Settings", href: "#" },
+  { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
 export function Sidebar() {

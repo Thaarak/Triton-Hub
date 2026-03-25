@@ -33,7 +33,13 @@ export function Dashboard() {
       setIsLoading(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const backendToken =
+          typeof sessionStorage !== "undefined"
+            ? sessionStorage.getItem("triton_session_token")
+            : null;
+
+        // Email/password: Supabase session. Google OAuth: no session but backend Bearer token (see app/page.tsx).
+        if (!session && !backendToken) {
           setIsLoading(false);
           return;
         }

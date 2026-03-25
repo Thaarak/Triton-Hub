@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GraduationCap, Mail, Lock, ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -17,6 +18,15 @@ export default function LoginPage() {
         password: "",
     });
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+        if (params.get("error") === "auth_failed") {
+            setError(
+                "Google sign-in could not finish (server could not create your profile). Confirm SUPABASE_URL and SUPABASE_KEY in the backend .env, then try again."
+            );
+        }
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -141,7 +151,10 @@ export default function LoginPage() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => window.location.href = "http://localhost:8080/auth/google"}
+                                onClick={() => {
+                                    setError(null);
+                                    window.location.href = `${BACKEND_URL}/auth/google`;
+                                }}
                                 className="w-full bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold h-12 rounded-xl transition-all flex items-center justify-center gap-3 group"
                             >
                                 <svg className="w-5 h-5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">

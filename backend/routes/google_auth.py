@@ -1,11 +1,17 @@
 import os
+import uuid
 
-from flask import Blueprint, redirect, request, session, url_for, jsonify
-import google.oauth2.credentials
+# Google may return extra scopes (e.g. openid); oauthlib otherwise raises on mismatch.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
+from flask import Blueprint, redirect, request, session
 import google_auth_oauthlib.flow
 from googleapiclient.discovery import build
+from itsdangerous import URLSafeTimedSerializer
+from supabase import create_client
 
 from db import get_user_by_email, create_user
+from sync_service import perform_full_sync
 
 google_auth = Blueprint("google_auth", __name__, url_prefix="/auth/google")
 
@@ -20,6 +26,7 @@ CLIENT_CONFIG = {
 }
 
 SCOPES = [
+    "openid",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
@@ -31,10 +38,9 @@ def authorize():
     flow = google_auth_oauthlib.flow.Flow.from_client_config(
         CLIENT_CONFIG, scopes=SCOPES
     )
-    # Force the redirect URI to match exactly what is in the console/env
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/auth/google/callback")
     flow.redirect_uri = redirect_uri
-    
+
     print(f"DEBUG: Redirecting to Google with URI: {redirect_uri}")
 
     authorization_url, state = flow.authorization_url(
@@ -46,13 +52,13 @@ def authorize():
     session["state"] = state
     return redirect(authorization_url)
 
+
 @google_auth.route("/callback")
 def callback():
     state = session.get("state")
     flow = google_auth_oauthlib.flow.Flow.from_client_config(
         CLIENT_CONFIG, scopes=SCOPES, state=state
     )
-    # Match the redirect_uri exactly
     flow.redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/auth/google/callback")
 
     flow.fetch_token(authorization_response=request.url)
@@ -68,81 +74,75 @@ def callback():
     }
     session["google_credentials"] = creds_dict
 
-    # 1. Get user info from Google
-    from googleapiclient.discovery import build
-    service = build('oauth2', 'v2', credentials=credentials)
+    service = build("oauth2", "v2", credentials=credentials)
     user_info = service.userinfo().get().execute()
     user_email = user_info.get("email")
     full_name = user_info.get("name")
-    google_id = user_info.get("id")
 
-    # 2. Sync with Supabase logic
     user_id = None
     has_canvas_token = False
-    profile_found = False  # True = existing profile in Supabase → dashboard; False → setup for Canvas token
 
     print(f"DEBUG: Handling sync for email: {user_email}")
 
     try:
         supabase_url = os.environ.get("SUPABASE_URL")
-        supabase_key = os.environ.get("SUPABASE_KEY")  # service_role
+        supabase_key = os.environ.get("SUPABASE_KEY")
         if not supabase_url or not supabase_key:
             print("DEBUG CRITICAL: SUPABASE_URL or SUPABASE_KEY not set.")
             raise ValueError("Supabase not configured")
         supabase = create_client(supabase_url, supabase_key)
 
-        # A. Try to find existing profile by exact email match
         print(f"DEBUG: Querying profiles table for {user_email}...")
         res = supabase.table("profiles").select("id, canvas_token").eq("email", user_email).execute()
 
         if res.data and len(res.data) > 0:
-            profile_found = True
             user_id = res.data[0]["id"]
             canv_tok = res.data[0].get("canvas_token")
             has_canvas_token = bool(canv_tok and canv_tok.strip())
-            print(f"DEBUG: Found existing profile! ID: {user_id} → sending to dashboard.")
+            print(f"DEBUG: Found existing profile! ID: {user_id}")
         else:
             print(f"DEBUG: No profile found for {user_email}. Attempting to locate or create user...")
-            # B. Attempt to find the user in Supabase Auth via email search (admin)
             try:
-                # list_users returns paginated result; get enough pages to find by email
-                ulist = []
-                users_res = supabase.auth.admin.list_users(params={"per_page": 1000})
-                if isinstance(users_res, list):
-                    ulist = users_res
-                elif hasattr(users_res, "users"):
-                    ulist = users_res.users or []
-                elif hasattr(users_res, "data"):
-                    data = users_res.data
-                    ulist = data.get("users", data.users if hasattr(data, "users") else []) if isinstance(data, dict) else (getattr(data, "users", None) or [])
-                # Handle list of user objects (may have .email/.id or ["email"]/["id"])
-                for u in ulist:
-                    em = getattr(u, "email", None) or (u.get("email") if isinstance(u, dict) else None)
-                    if em and str(em).lower() == user_email.lower():
-                        user_id = getattr(u, "id", None) or (u.get("id") if isinstance(u, dict) else None)
-                        if user_id:
-                            print(f"DEBUG: Found existing auth.user ID: {user_id}")
-                            break
-                
-                # C. If still no user_id, create the user in Auth
+                def _find_user_id():
+                    ulist = supabase.auth.admin.list_users(page=1, per_page=1000)
+                    if not isinstance(ulist, list):
+                        ulist = getattr(ulist, "users", None) or []
+                    for u in ulist:
+                        em = getattr(u, "email", None) or (u.get("email") if isinstance(u, dict) else None)
+                        if em and str(em).lower() == user_email.lower():
+                            uid = getattr(u, "id", None) or (u.get("id") if isinstance(u, dict) else None)
+                            if uid:
+                                return uid
+                    return None
+
+                user_id = _find_user_id()
+                if user_id:
+                    print(f"DEBUG: Found existing auth.user ID: {user_id}")
+
                 if not user_id:
                     print("DEBUG: User totally new. Creating in Auth...")
-                    new_user_res = supabase.auth.admin.create_user({
-                        "email": user_email,
-                        "password": str(uuid.uuid4())[:16],
-                        "email_confirm": True,
-                        "user_metadata": {"full_name": full_name},
-                    })
-                    # Extract ID from result: response has .user.id or .data or dict with user.id
-                    uobj = getattr(new_user_res, "user", None) or (new_user_res.get("user") if isinstance(new_user_res, dict) else None)
-                    if uobj is not None:
-                        user_id = getattr(uobj, "id", None) or (uobj.get("id") if isinstance(uobj, dict) else None)
-                    if not user_id and hasattr(new_user_res, "data"):
-                        d = new_user_res.data
-                        user_id = getattr(d, "id", None) or (d.get("id") if isinstance(d, dict) else None)
-                    print(f"DEBUG: Created new Auth user ID: {user_id}")
+                    try:
+                        new_user_res = supabase.auth.admin.create_user({
+                            "email": user_email,
+                            "password": str(uuid.uuid4())[:16],
+                            "email_confirm": True,
+                            "user_metadata": {"full_name": full_name},
+                        })
+                        uobj = getattr(new_user_res, "user", None) or (new_user_res.get("user") if isinstance(new_user_res, dict) else None)
+                        if uobj is not None:
+                            user_id = getattr(uobj, "id", None) or (uobj.get("id") if isinstance(uobj, dict) else None)
+                        if not user_id and hasattr(new_user_res, "data"):
+                            d = new_user_res.data
+                            user_id = getattr(d, "id", None) or (d.get("id") if isinstance(d, dict) else None)
+                        print(f"DEBUG: Created new Auth user ID: {user_id}")
+                    except Exception as create_e:
+                        err_s = str(create_e).lower()
+                        if "already" in err_s or "registered" in err_s or "exists" in err_s:
+                            print("DEBUG: User already exists in Auth, re-listing...")
+                            user_id = _find_user_id()
+                        else:
+                            raise
 
-                # D. Create or update the public profile record
                 if user_id:
                     print(f"DEBUG: Creating/updating public.profile for {user_id}...")
                     supabase.table("profiles").upsert(
@@ -154,13 +154,11 @@ def callback():
                 import traceback
                 traceback.print_exc()
 
-        # Final storage in session
         session["user_id"] = user_id
         session["user_email"] = user_email
-        
-        # Trigger sync if user is ready
+
         if user_id and has_canvas_token:
-            print(f"🚀 User {user_email} is ready. Triggering sync mission.")
+            print(f"[sync] User {user_email} is ready. Triggering sync mission.")
             try:
                 perform_full_sync(creds_dict)
             except Exception as sync_e:
@@ -169,33 +167,33 @@ def callback():
     except Exception as e:
         print(f"DEBUG CRITICAL FAULT: {e}")
 
-    # --- FINAL REDIRECT ---
-    base_f = os.environ.get('FRONTEND_URL', 'http://localhost:3000').rstrip('/')
+    base_f = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
     uid = session.get("user_id")
 
     if not uid or str(uid) == "None":
-        print("❌ AUTH FLOW FAILED: No user ID identified.")
+        print("[auth] AUTH FLOW FAILED: No user ID identified.")
         return redirect(f"{base_f}/login?error=auth_failed")
 
-    # Fetch the user's Google profile (name + email)
-    people_service = build("people", "v1", credentials=credentials)
-    profile = people_service.people().get(
-        resourceName="people/me",
-        personFields="names,emailAddresses",
-    ).execute()
+    # Optional: legacy users table sync (People API) — must not break login
+    try:
+        people_service = build("people", "v1", credentials=credentials)
+        profile = people_service.people().get(
+            resourceName="people/me",
+            personFields="names,emailAddresses",
+        ).execute()
+        email = profile["emailAddresses"][0]["value"]
+        pname = profile["names"][0]["displayName"]
+        existing_user = get_user_by_email(email)
+        if existing_user:
+            session["user"] = existing_user
+        else:
+            new_user = create_user(email=email, full_name=pname)
+            session["user"] = new_user
+    except Exception as legacy_e:
+        print(f"DEBUG: Optional legacy users/People sync skipped: {legacy_e}")
 
-    email = profile["emailAddresses"][0]["value"]
-    full_name = profile["names"][0]["displayName"]
+    secret = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key")
+    oauth_serializer = URLSafeTimedSerializer(secret, salt="oauth-redirect")
+    redirect_token = oauth_serializer.dumps({"user_id": str(uid), "email": user_email})
 
-    # Check if user already exists in the database
-    existing_user = get_user_by_email(email)
-
-    if existing_user:
-        # Returning user — store their info in session
-        session["user"] = existing_user
-    else:
-        # New user — create them in the database
-        new_user = create_user(email=email, full_name=full_name)
-        session["user"] = new_user
-
-    return redirect(url_for("emails.get_emails"))
+    return redirect(f"{base_f}/home?t={redirect_token}")

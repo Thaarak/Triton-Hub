@@ -1,6 +1,8 @@
 export type EventType = "announcement" | "personal" | "exam" | "event" | "assignment" | "grade";
 export type Urgency = "urgent" | "medium" | "low";
 
+import type { DataOrigin } from "./notification-origin";
+
 export type CalendarEvent = {
   id: string;
   notificationId: number; // Original notification ID for updates
@@ -12,6 +14,8 @@ export type CalendarEvent = {
   type: EventType;
   urgency: Urgency;
   course?: string;
+  /** Email = inbox/DB sync; Canvas = live Canvas API in browser */
+  dataOrigin: DataOrigin;
   link?: string;
   completed: boolean;
 };
