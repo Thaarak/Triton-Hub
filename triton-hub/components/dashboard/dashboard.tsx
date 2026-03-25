@@ -14,7 +14,19 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { fetchAndTransformNotifications } from "@/lib/notifications";
+import { syncCanvasData } from "@/lib/canvas";
 import { toast } from "sonner";
+
+type DashboardClassCard = {
+  id: string | number;
+  name: string;
+  courseCode: string;
+  filterKey: string;
+  professor?: string | null;
+  term?: string | null;
+  currentScore?: number | null;
+  currentGrade?: string | null;
+};
 
 export function Dashboard() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
@@ -27,7 +39,7 @@ export function Dashboard() {
 
   // Notifications State
   const [updates, setUpdates] = useState<Update[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
+  const [classes, setClasses] = useState<DashboardClassCard[]>([]);
 
   const loadNotifications = useCallback(async () => {
     setIsLoading(true);
@@ -47,20 +59,57 @@ export function Dashboard() {
       const notificationUpdates = await fetchAndTransformNotifications();
       setUpdates(notificationUpdates);
 
-      const uniqueCourses = new Map<string, { name: string; courseCode: string }>();
-      notificationUpdates.forEach((update) => {
-        if (update.course && !uniqueCourses.has(update.course)) {
-          uniqueCourses.set(update.course, {
-            name: update.course,
-            courseCode: update.course,
-          });
+      const nextClasses: DashboardClassCard[] = [];
+      const personalFilterKey = "Personal";
+      const hasPersonal = notificationUpdates.some((update) => update.course === personalFilterKey);
+
+      if (typeof window !== "undefined") {
+        const canvasToken = sessionStorage.getItem("canvas_token");
+        const canvasUrl = sessionStorage.getItem("canvas_url") || undefined;
+
+        if (canvasToken) {
+          try {
+            const canvasData = await syncCanvasData(canvasToken, canvasUrl);
+            nextClasses.push(
+              ...canvasData.classes.map((course: {
+                id: number;
+                name: string;
+                courseCode: string;
+                professor: string | null;
+                term: string | null;
+                currentScore: number | null;
+                currentGrade: string | null;
+              }) => ({
+                id: course.id,
+                name: course.name,
+                courseCode: course.courseCode || course.name,
+                filterKey: course.name,
+                professor: course.professor,
+                term: course.term,
+                currentScore: course.currentScore,
+                currentGrade: course.currentGrade,
+              }))
+            );
+          } catch (canvasError) {
+            console.error("Failed to load Canvas class cards:", canvasError);
+          }
         }
-      });
-      setClasses(Array.from(uniqueCourses.values()).map((c, idx) => ({
-        id: idx,
-        name: c.name,
-        courseCode: c.courseCode,
-      })));
+      }
+
+      if (hasPersonal) {
+        nextClasses.unshift({
+          id: "personal",
+          name: "Personal",
+          courseCode: "PERSONAL",
+          filterKey: personalFilterKey,
+          professor: "You",
+          term: "Personal",
+          currentScore: null,
+          currentGrade: null,
+        });
+      }
+
+      setClasses(nextClasses);
     } catch (error) {
       console.error("Failed to load notifications:", error);
       toast.error("Failed to load notifications");

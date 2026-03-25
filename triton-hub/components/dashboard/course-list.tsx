@@ -4,7 +4,16 @@ import { cn } from "@/lib/utils";
 import { User, BookOpen } from "lucide-react";
 
 interface CourseListProps {
-    classes: any[];
+    classes: Array<{
+        id: string | number;
+        name: string;
+        courseCode: string;
+        filterKey?: string;
+        professor?: string | null;
+        term?: string | null;
+        currentGrade?: string | null;
+        currentScore?: number | null;
+    }>;
     onCourseClick: (courseCode: string) => void;
     className?: string;
 }
@@ -24,7 +33,7 @@ export function CourseList({ classes, onCourseClick, className }: CourseListProp
             {classes.map((cls) => (
                 <div
                     key={cls.id}
-                    onClick={() => onCourseClick(cls.courseCode)}
+                    onClick={() => onCourseClick(cls.filterKey ?? cls.courseCode)}
                     className="group relative overflow-hidden p-5 rounded-2xl border border-border bg-card hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 cursor-pointer active:scale-[0.98]"
                 >
                     {/* Decorative background element */}
@@ -61,9 +70,11 @@ export function CourseList({ classes, onCourseClick, className }: CourseListProp
                                 <User className="h-4 w-4" />
                                 <span className="font-medium">{cls.professor ?? 'Staff'}</span>
                             </div>
-                            <div className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-[10px] font-bold">
-                                {cls.term}
-                            </div>
+                            {cls.term ? (
+                                <div className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-[10px] font-bold">
+                                    {cls.term}
+                                </div>
+                            ) : null}
                         </div>
                     </div>
                 </div>
