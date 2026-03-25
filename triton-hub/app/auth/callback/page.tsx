@@ -11,7 +11,8 @@ const CONFIG_HINT =
 
 /**
  * OAuth return in the browser:
- * - PKCE: ?code=… + cookie verifier (preferred)
+ * - PKCE ?code=…: GoTrueClient exchanges the code during auth.initialize() (detectSessionInUrl).
+ *   Do not call exchangeCodeForSession again — it consumes the verifier twice and errors.
  * - Implicit: #access_token=… (hash is never sent to a Route Handler — only the client can read it)
  *
  * If you land on localhost after production sign-in, Supabase is still using localhost as Site URL.
@@ -35,12 +36,24 @@ function AuthCallbackContent() {
 
       const code = searchParams.get("code");
       if (code) {
-        const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-        if (exErr) {
-          setError(exErr.message);
+        const { error: initError } = await supabase.auth.initialize();
+        if (initError) {
+          setError(initError.message);
           return;
         }
-        router.replace("/");
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+        if (sessionError) {
+          setError(sessionError.message);
+          return;
+        }
+        if (session) {
+          router.replace("/");
+          return;
+        }
+        setError(`Could not complete sign-in. ${CONFIG_HINT}`);
         return;
       }
 

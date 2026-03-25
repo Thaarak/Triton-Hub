@@ -3,7 +3,10 @@ import { createBrowserClient } from "@supabase/ssr";
 /**
  * Browser Supabase client: PKCE + session state live in cookies (via @supabase/ssr),
  * which survives the Google redirect. Plain createClient() stored the verifier in
- * localStorage and broke exchangeCodeForSession on return.
+ * localStorage and broke the OAuth return.
+ *
+ * With detectSessionInUrl (default), the client exchanges ?code= during initialize().
+ * The /auth/callback page must not call exchangeCodeForSession again.
  */
 export const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
