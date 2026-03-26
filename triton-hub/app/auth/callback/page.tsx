@@ -50,6 +50,15 @@ function AuthCallbackContent() {
           return;
         }
         if (session) {
+          // Save Google refresh token immediately — it is ONLY available here, not after redirect
+          if (session.provider_refresh_token) {
+            await fetch("/api/profile/gmail-token", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ refresh_token: session.provider_refresh_token }),
+            }).catch(() => {});
+          }
           router.replace("/");
           return;
         }
@@ -66,6 +75,14 @@ function AuthCallbackContent() {
           return;
         }
         if (first.session) {
+          if (first.session.provider_refresh_token) {
+            await fetch("/api/profile/gmail-token", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ refresh_token: first.session.provider_refresh_token }),
+            }).catch(() => {});
+          }
           window.history.replaceState(null, "", window.location.pathname);
           router.replace("/");
           return;
@@ -76,6 +93,14 @@ function AuthCallbackContent() {
             if (session) {
               if (timeoutId) clearTimeout(timeoutId);
               sub.unsubscribe();
+              if (session.provider_refresh_token) {
+                fetch("/api/profile/gmail-token", {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ refresh_token: session.provider_refresh_token }),
+                }).catch(() => {});
+              }
               window.history.replaceState(null, "", window.location.pathname);
               router.replace("/");
             }

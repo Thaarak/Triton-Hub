@@ -23,7 +23,7 @@ function headerFromPayload(msg: GmailMessage, name: string): string {
 }
 
 async function refreshGoogleAccessToken(refreshToken: string): Promise<string | null> {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;
   const res = await fetch("https://oauth2.googleapis.com/token", {
