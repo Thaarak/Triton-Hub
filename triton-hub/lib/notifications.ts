@@ -19,6 +19,24 @@ export type InboxEmailFetchResult = {
   message?: string;
 };
 
+/** Last inbox fetch summary for manual debugging (DevTools → Application → Session Storage → `triton_last_inbox_debug`). */
+export function writeInboxDebugSnapshot(result: InboxEmailFetchResult): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      "triton_last_inbox_debug",
+      JSON.stringify({
+        at: new Date().toISOString(),
+        emailsCount: result.emails.length,
+        error: result.error ?? null,
+        message: result.message ?? null,
+      })
+    );
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
 async function postInboxEmailsOnce(): Promise<InboxEmailFetchResult> {
   const {
     data: { session },
@@ -40,13 +58,33 @@ async function postInboxEmailsOnce(): Promise<InboxEmailFetchResult> {
         message: "Please sign in with Google to view emails",
       };
     }
-    return { emails: [] };
+    const errBody = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+    };
+    return {
+      emails: [],
+      error: typeof errBody.error === "string" ? errBody.error : "inbox_request_failed",
+      message:
+        typeof errBody.message === "string"
+          ? errBody.message
+          : `Could not load inbox (HTTP ${res.status}).`,
+    };
   }
-  const data = (await res.json()) as {
-    emails?: unknown;
-    error?: string;
-    message?: string;
-  };
+  let data: { emails?: unknown; error?: string; message?: string };
+  try {
+    data = (await res.json()) as {
+      emails?: unknown;
+      error?: string;
+      message?: string;
+    };
+  } catch {
+    return {
+      emails: [],
+      error: "inbox_parse_error",
+      message: "Could not read inbox response. Check Network → POST /api/emails.",
+    };
+  }
   return {
     emails: Array.isArray(data.emails) ? (data.emails as BackendEmailItem[]) : [],
     error: typeof data.error === "string" ? data.error : undefined,
@@ -75,9 +113,18 @@ export async function fetchInboxEmailsFromApi(): Promise<InboxEmailFetchResult> 
       result = await postInboxEmailsOnce();
     }
 
+    writeInboxDebugSnapshot(result);
     return result;
-  } catch {
-    return { emails: [] };
+  } catch (err) {
+    console.error("[fetchInboxEmailsFromApi]", err);
+    const failed: InboxEmailFetchResult = {
+      emails: [],
+      error: "inbox_client_error",
+      message:
+        "Inbox request failed in the browser (network blocked, extension, or session error). Check the console and Network tab for POST /api/emails.",
+    };
+    writeInboxDebugSnapshot(failed);
+    return failed;
   }
 }
 
@@ -109,15 +156,17 @@ function emailIdToSyntheticNotificationId(id: string, index: number): number {
 function mergeRawEmailsIntoNotifications(rows: Notification[], emails: BackendEmailItem[]): Notification[] {
   if (emails.length === 0) return rows;
 
-  const seenSummaries = new Set(
-    rows.map((row) => (row.summary ?? "").trim().toLowerCase())
-  );
+  // Dedupe only within this Gmail batch (by message id). Do not drop emails just because a Canvas/DB row
+  // shares the same subject line — that hid real inbox items on the Home feed.
+  const seenGmailIds = new Set<string>();
   const merged = [...rows];
 
   emails.forEach((email, index) => {
+    const idKey = (email.id || "").trim();
+    if (idKey && seenGmailIds.has(idKey)) return;
+    if (idKey) seenGmailIds.add(idKey);
+
     const subject = (email.subject || "(No Subject)").trim();
-    const summaryKey = subject.toLowerCase();
-    if (seenSummaries.has(summaryKey)) return;
 
     merged.push({
       id: emailIdToSyntheticNotificationId(email.id, index),
@@ -133,7 +182,6 @@ function mergeRawEmailsIntoNotifications(rows: Notification[], emails: BackendEm
       user_id: "email",
       completed: false,
     });
-    seenSummaries.add(summaryKey);
   });
 
   return merged.sort((a, b) => safeParseDate(b.created_at).getTime() - safeParseDate(a.created_at).getTime());

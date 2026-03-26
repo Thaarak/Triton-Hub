@@ -15,9 +15,11 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { hydrateCanvasTokenFromSupabase } from "@/lib/canvas-setup";
 import { syncGmailRefreshTokenToProfile } from "@/lib/gmail-sync";
-import { fetchAndTransformNotifications } from "@/lib/notifications";
+import { fetchAndTransformNotifications, type InboxEmailFetchResult } from "@/lib/notifications";
+import { getNotificationSourceFilter } from "@/lib/user-preferences";
 import { syncCanvasData } from "@/lib/canvas";
 import { toast } from "sonner";
+import Link from "next/link";
 
 type DashboardClassCard = {
   id: string | number;
@@ -42,6 +44,10 @@ export function Dashboard() {
   // Notifications State
   const [updates, setUpdates] = useState<Update[]>([]);
   const [classes, setClasses] = useState<DashboardClassCard[]>([]);
+  /** Mirrors localStorage `triton_source_filter` after each load (Settings changes apply on next refresh/load). */
+  const [feedSourceFilter, setFeedSourceFilter] = useState<ReturnType<typeof getNotificationSourceFilter>>("both");
+  /** Last Gmail fetch from `fetchAndTransformNotifications` (for Email tab empty-state diagnostics). */
+  const [inboxSnapshot, setInboxSnapshot] = useState<InboxEmailFetchResult | null>(null);
 
   const loadNotifications = useCallback(async () => {
     setIsLoading(true);
@@ -55,6 +61,7 @@ export function Dashboard() {
       if (!session && !backendToken) {
         setUpdates([]);
         setClasses([]);
+        setInboxSnapshot(null);
         return;
       }
 
@@ -63,8 +70,11 @@ export function Dashboard() {
         await syncGmailRefreshTokenToProfile();
       }
 
+      setFeedSourceFilter(getNotificationSourceFilter());
+
       const { updates: notificationUpdates, inbox } = await fetchAndTransformNotifications();
       setUpdates(notificationUpdates);
+      setInboxSnapshot(inbox);
 
       if (
         typeof sessionStorage !== "undefined" &&
@@ -75,7 +85,13 @@ export function Dashboard() {
         const key = `triton_inbox_warn_${inbox.error}`;
         if (!sessionStorage.getItem(key)) {
           sessionStorage.setItem(key, "1");
-          if (inbox.error === "gmail_api_error" || inbox.error === "schema_outdated") {
+          if (
+            inbox.error === "gmail_api_error" ||
+            inbox.error === "schema_outdated" ||
+            inbox.error === "inbox_request_failed" ||
+            inbox.error === "inbox_client_error" ||
+            inbox.error === "inbox_parse_error"
+          ) {
             toast.error(inbox.message);
           } else {
             toast.info(inbox.message, { duration: 12_000 });
@@ -301,12 +317,24 @@ export function Dashboard() {
           </div>
 
           {!selectedCourseCode && (
-            <FilterBar
-              activeFilter={activeFilter}
-              onFilterChange={setActiveFilter}
-              isLoading={isLoading}
-              onRefresh={handleRefresh}
-            />
+            <>
+              {feedSourceFilter === "canvas" ? (
+                <div className="mb-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground">
+                  <span className="font-medium">Canvas-only feed:</span> Gmail-merged inbox items are hidden. Switch to
+                  &quot;Show both&quot; in{" "}
+                  <Link href="/settings" className="text-primary underline underline-offset-2">
+                    Settings → Content
+                  </Link>{" "}
+                  to see them on Home.
+                </div>
+              ) : null}
+              <FilterBar
+                activeFilter={activeFilter}
+                onFilterChange={setActiveFilter}
+                isLoading={isLoading}
+                onRefresh={handleRefresh}
+              />
+            </>
           )}
 
           {/* Logic for showing sync card vs content */}
@@ -341,6 +369,8 @@ export function Dashboard() {
                 filter={selectedCourseCode ? 'all' : activeFilter}
                 onMarkRead={handleMarkRead}
                 isLoading={isLoading}
+                inboxMeta={inboxSnapshot}
+                sourceFeedFilter={feedSourceFilter}
               />
             </>
           )}
