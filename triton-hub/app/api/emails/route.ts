@@ -148,6 +148,71 @@ type EmailRow = {
   date: string | null;
 };
 
+/**
+ * Uses Gemini Flash to filter the email list down to only items relevant to a student:
+ * professor/TA messages, course updates, academic deadlines, career/internship emails, etc.
+ * Verification codes, newsletters, promotions, and automated receipts are discarded.
+ * Falls back to returning all emails unchanged if GEMINI_API_KEY is not set or the call fails.
+ */
+async function filterEmailsWithGemini(emails: EmailRow[]): Promise<EmailRow[]> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || emails.length === 0) return emails;
+
+  const emailList = emails
+    .map((e) => `ID: ${e.id}\nFrom: ${e.from}\nSubject: ${e.subject}\nSnippet: ${e.snippet}`)
+    .join("\n---\n");
+
+  const prompt = `You are a smart email filter for a college student dashboard.
+
+Classify each email below as IMPORTANT or SKIP.
+
+IMPORTANT emails include:
+- Messages from professors, TAs, course instructors, academic advisors, or university staff
+- Course announcements, grade updates, assignment feedback, exam info
+- Emails from academic platforms (Canvas, Gradescope, Piazza, Slack, Zoom, etc.)
+- Internship, job, or research opportunity emails
+- Emails from classmates or study groups about coursework
+- Important university administration messages
+
+SKIP emails include:
+- Verification codes / OTP / magic link / "confirm your email"
+- Marketing, promotions, newsletters, deals, or product announcements
+- Social media notifications (Instagram, Twitter, LinkedIn activity digests, etc.)
+- Automated receipts, shipping notifications, or payment confirmations
+- "No-reply" bulk sender emails not related to academics
+
+Respond ONLY with a JSON array of IDs for IMPORTANT emails. Example: ["id1","id2"]
+If none are important, respond with [].
+
+Emails to classify:
+${emailList}`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" },
+        }),
+      }
+    );
+    if (!res.ok) return emails;
+
+    const data = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
+    const importantIds = new Set<string>(JSON.parse(text) as string[]);
+    const filtered = emails.filter((e) => importantIds.has(e.id));
+    return filtered.length > 0 ? filtered : emails;
+  } catch {
+    return emails;
+  }
+}
+
 async function parseClientTokens(request: Request): Promise<ClientTokens | null> {
   if (request.method !== "POST") return null;
   try {
@@ -296,7 +361,8 @@ async function handleEmails(request: Request) {
     );
   }
 
-  return NextResponse.json({ emails: result.emails, debug: result.debug });
+  const filtered = await filterEmailsWithGemini(result.emails);
+  return NextResponse.json({ emails: filtered, debug: result.debug });
 }
 
 export async function GET() {

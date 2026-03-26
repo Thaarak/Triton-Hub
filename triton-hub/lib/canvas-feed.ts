@@ -155,7 +155,37 @@ export async function fetchCanvasMergeNotifications(): Promise<Notification[]> {
     };
   });
 
-  return [...assignmentNotifs, ...announcementNotifs];
+  const all = [...assignmentNotifs, ...announcementNotifs];
+  return filterCanvasWithGemini(all);
+}
+
+/**
+ * Sends Canvas notifications to /api/canvas-filter so Gemini can drop repetitive
+ * same-course announcements while always preserving assignments and cross-course items.
+ */
+async function filterCanvasWithGemini(items: Notification[]): Promise<Notification[]> {
+  if (items.length === 0) return items;
+  try {
+    const payload = items.map((n) => ({
+      id: n.id,
+      source: n.source,
+      category: n.category,
+      summary: n.summary,
+      event_date: n.event_date,
+    }));
+    const res = await fetch("/api/canvas-filter", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: payload }),
+    });
+    if (!res.ok) return items;
+    const data = (await res.json()) as { keepIds?: number[] };
+    if (!Array.isArray(data.keepIds) || data.keepIds.length === 0) return items;
+    const keep = new Set<number>(data.keepIds);
+    return items.filter((n) => keep.has(n.id));
+  } catch {
+    return items;
+  }
 }
 
 /**
