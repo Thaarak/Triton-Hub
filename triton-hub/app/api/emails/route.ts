@@ -162,27 +162,24 @@ async function filterEmailsWithGemini(emails: EmailRow[]): Promise<EmailRow[]> {
     .map((e) => `ID: ${e.id}\nFrom: ${e.from}\nSubject: ${e.subject}\nSnippet: ${e.snippet}`)
     .join("\n---\n");
 
-  const prompt = `You are a smart email filter for a college student dashboard.
+  const prompt = `You are a strict email filter for a college student dashboard. Be conservative — when in doubt, SKIP.
 
-Classify each email below as IMPORTANT or SKIP.
+Only mark an email IMPORTANT if it clearly fits one of these categories:
+1. CLASS emails — a real human (professor, TA, instructor) directly emailing about coursework, grades, office hours, exams, or assignments. Canvas/Gradescope/Piazza assignment or grade notifications also count.
+2. CLUB / STUDENT ORG emails — a student club, organization, or campus group emailing about meetings, events, or opportunities.
+3. INTERNSHIP / RESEARCH / JOB emails — a recruiter, company, or research lab reaching out about a specific opportunity, application status, or interview.
 
-IMPORTANT emails include:
-- Messages from professors, TAs, course instructors, academic advisors, or university staff
-- Course announcements, grade updates, assignment feedback, exam info
-- Emails from academic platforms (Canvas, Gradescope, Piazza, Slack, Zoom, etc.)
-- Internship, job, or research opportunity emails
-- Emails from classmates or study groups about coursework
-- Important university administration messages
-
-SKIP emails include:
-- Verification codes / OTP / magic link / "confirm your email"
-- Marketing, promotions, newsletters, deals, or product announcements
-- Social media notifications (Instagram, Twitter, LinkedIn activity digests, etc.)
-- Automated receipts, shipping notifications, or payment confirmations
-- "No-reply" bulk sender emails not related to academics
+SKIP everything else, including:
+- Security alerts, login notifications, OAuth app additions, account activity (GitHub, Google, any platform)
+- Verification codes, OTPs, magic links, "confirm your email" messages
+- Newsletters, digests, product updates, marketing from any company
+- Social media notifications (likes, follows, comments, digests) from Instagram, LinkedIn, Twitter, etc.
+- Automated receipts, order confirmations, shipping updates
+- University-wide mass blast emails (parking, campus construction, general IT notices)
+- Any "no-reply" automated email that is not a direct Canvas/Gradescope/Piazza academic notification
 
 Respond ONLY with a JSON array of IDs for IMPORTANT emails. Example: ["id1","id2"]
-If none are important, respond with [].
+If none qualify, respond with [].
 
 Emails to classify:
 ${emailList}`;
@@ -206,8 +203,7 @@ ${emailList}`;
     };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
     const importantIds = new Set<string>(JSON.parse(text) as string[]);
-    const filtered = emails.filter((e) => importantIds.has(e.id));
-    return filtered.length > 0 ? filtered : emails;
+    return emails.filter((e) => importantIds.has(e.id));
   } catch {
     return emails;
   }
