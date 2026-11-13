@@ -23,7 +23,8 @@ import { formatDistanceToNow, format } from "date-fns";
 
 interface UpdateCardProps {
   update: Update;
-  onMarkRead: (id: string) => void;
+  showRelativeTime?: boolean;
+  onMarkRead?: (id: string) => void;
 }
 
 const sourceConfig = {
@@ -67,7 +68,7 @@ function isValidDate(date: Date | undefined | null): date is Date {
   return date instanceof Date && !isNaN(date.getTime());
 }
 
-export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
+export function UpdateCard({ update, onMarkRead, showRelativeTime = true }: UpdateCardProps) {
   const [expanded, setExpanded] = useState(false);
   const config = sourceConfig[update.source] ?? sourceConfig.email;
   const catConfig = categoryConfig[update.category as keyof typeof categoryConfig];
@@ -77,7 +78,7 @@ export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
     <div
       className={cn(
         "group relative rounded-xl border bg-card p-4 transition-all duration-200 hover:shadow-md",
-        update.unread && !update.isCompleted
+        !onMarkRead || (update.unread && !update.isCompleted)
           ? "border-border/80 shadow-sm"
           : "border-border/50 opacity-75"
       )}
@@ -149,13 +150,13 @@ export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
                 Urgent
               </Badge>
             )}
-            <span className="text-[10px] font-medium text-muted-foreground uppercase">
+            {showRelativeTime && <span className="text-[10px] font-medium text-muted-foreground uppercase">
               {update.category === "assignment" && !update.dueDate
                 ? "No Due Date"
                 : isValidDate(update.timestamp)
                   ? formatDistanceToNow(update.timestamp, { addSuffix: true })
                   : "Unknown"}
-            </span>
+            </span>}
           </div>
 
           <h3
@@ -193,7 +194,7 @@ export function UpdateCard({ update, onMarkRead }: UpdateCardProps) {
 
         {/* Actions */}
         <div className="flex shrink-0 items-center gap-1">
-          {update.unread && !update.isCompleted && (
+          {onMarkRead && update.unread && !update.isCompleted && (
             <Button
               variant="ghost"
               size="sm"

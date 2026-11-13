@@ -38,12 +38,15 @@ export function AuthShell({
             </div>
           </Link>
 
-          <Button asChild variant="outline" className="rounded-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-            <Link href="/">
-              Back home
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
+          <div className="flex items-center gap-4">
+            <Link href="/demo" className="text-sm text-blue-200 underline-offset-4 hover:underline">Explore the demo</Link>
+            <Button asChild variant="outline" className="rounded-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+              <Link href="/">
+                Back home
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 

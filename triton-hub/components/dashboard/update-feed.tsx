@@ -143,7 +143,7 @@ export function UpdateFeed({
           No {filter === 'all' ? 'updates' : filter + 's'} found
         </h3>
         <p className="text-sm text-muted-foreground max-w-sm">
-          You're all caught up! Check back later for new updates.
+          You&apos;re all caught up! Check back later for new updates.
         </p>
       </div>
     );

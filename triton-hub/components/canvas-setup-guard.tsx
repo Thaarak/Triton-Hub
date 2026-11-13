@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { hasSupabaseConfig } from "@/lib/auth-config";
 import { needsCanvasSetup } from "@/lib/canvas-setup";
 
 /**
@@ -18,17 +19,19 @@ export function CanvasSetupGuard({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const run = async () => {
+      if (!hasSupabaseConfig) { router.replace("/demo"); return; }
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       if (!session) {
-        if (!cancelled) setAllowed(true);
+        if (!cancelled) router.replace("/login");
         return;
       }
 
-      const missing = await needsCanvasSetup(session.user.id);
-      if (missing) {
+      const missing = await needsCanvasSetup().catch(() => false);
+      if (cancelled) return;
+      if (missing && window.location.pathname !== "/settings") {
         router.replace("/setup");
         return;
       }

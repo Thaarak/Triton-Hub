@@ -95,8 +95,8 @@ export function LandingPage() {
                 size="lg"
                 className="rounded-full bg-blue-500 px-6 text-white shadow-[0_16px_40px_rgba(59,130,246,0.35)] hover:bg-blue-400"
               >
-                <Link href="/signup">
-                  Start your workspace
+                <Link href="/demo">
+                  Explore the demo
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>

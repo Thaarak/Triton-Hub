@@ -1,13 +1,14 @@
 import type { Notification } from "./types";
-import { toCanvasProxyUrl } from "./canvas-proxy-url";
+import { getCanvasCourses } from "./canvas";
 
-const TOKEN_STORAGE_KEY = "canvas_token";
-const URL_STORAGE_KEY = "canvas_url";
-const DEFAULT_CANVAS_URL = "https://canvas.ucsd.edu";
+type CanvasAssignment = {
+  id: number; course_id: number; due_at: string | null; html_url?: string;
+  name?: string; submission?: { workflow_state?: string };
+};
 
-function getCanvasApiBase(url: string): string {
-  return url.replace(/\/$/, "");
-}
+type CanvasAnnouncement = {
+  id: number; context_code?: string; posted_at?: string; html_url?: string; title?: string;
+};
 
 /** Stable synthetic negative ids (avoid collision with positive DB ids). */
 function syntheticAssignmentId(canvasAssignmentId: number): number {
@@ -48,58 +49,20 @@ function urgencyFromDue(dueAt: string | null): "high" | "medium" | "low" {
   return "medium";
 }
 
-/**
- * Fetch Canvas courses, assignments, and announcements and map to Notification-shaped rows
- * for merging with Supabase notifications. Only runs in the browser when sessionStorage has a token.
- */
+/** Map the signed-in student’s Canvas data to the unified feed. */
 export async function fetchCanvasMergeNotifications(): Promise<Notification[]> {
-  if (typeof window === "undefined") return [];
+  const base = "/canvas-api";
+  const filteredCourses = await getCanvasCourses();
 
-  const accessToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
-  const canvasUrl = sessionStorage.getItem(URL_STORAGE_KEY) || DEFAULT_CANVAS_URL;
-  if (!accessToken) return [];
-
-  const base = getCanvasApiBase(canvasUrl);
-  const headers = { Authorization: `Bearer ${accessToken}` };
-
-  const coursesUrl = toCanvasProxyUrl(
-    `${base}/api/v1/courses?include[]=total_scores&include[]=teachers&include[]=term&include[]=enrollments&enrollment_type=student&enrollment_state=active&per_page=50`
-  );
-  const coursesRes = await fetch(coursesUrl, { headers });
-  if (!coursesRes.ok) return [];
-
-  const courses = (await coursesRes.json()) as any[];
-  if (!Array.isArray(courses) || courses.length === 0) return [];
-
-  const termCounts = new Map<string, number>();
-  courses.forEach((c: any) => {
-    if (c.term?.name) termCounts.set(c.term.name, (termCounts.get(c.term.name) || 0) + 1);
-  });
-  let commonTerm: string | null = null;
-  let maxCount = 0;
-  termCounts.forEach((count, name) => {
-    if (count > maxCount) {
-      maxCount = count;
-      commonTerm = name;
-    }
-  });
-  const filteredCourses = commonTerm
-    ? courses.filter((c: any) => c.term?.name === commonTerm)
-    : courses;
-
-  const assignmentPromises = filteredCourses.map(async (course: any) => {
-    const url = toCanvasProxyUrl(
-      `${base}/api/v1/courses/${course.id}/assignments?include[]=submission&per_page=50&order_by=due_at`
-    );
-    const res = await fetch(url, { headers });
+  const assignmentPromises = filteredCourses.map(async (course): Promise<CanvasAssignment[]> => {
+    const url = `${base}/api/v1/courses/${course.id}/assignments?include[]=submission&per_page=50&order_by=due_at`;
+    const res = await fetch(url);
     return res.ok ? await res.json() : [];
   });
 
-  const annPromises = filteredCourses.map(async (course: any) => {
-    const url = toCanvasProxyUrl(
-      `${base}/api/v1/announcements?context_codes[]=course_${course.id}&per_page=10`
-    );
-    const res = await fetch(url, { headers });
+  const annPromises = filteredCourses.map(async (course): Promise<CanvasAnnouncement[]> => {
+    const url = `${base}/api/v1/announcements?context_codes[]=course_${course.id}&per_page=10`;
+    const res = await fetch(url);
     return res.ok ? await res.json() : [];
   });
 
@@ -111,8 +74,8 @@ export async function fetchCanvasMergeNotifications(): Promise<Notification[]> {
   const nowIso = new Date().toISOString();
   const syntheticUser = "canvas";
 
-  const assignmentNotifs: Notification[] = allAssignsRaw.flat().map((a: any) => {
-    const course = filteredCourses.find((c: any) => c.id === a.course_id);
+  const assignmentNotifs: Notification[] = allAssignsRaw.flat().map((a) => {
+    const course = filteredCourses.find((c) => c.id === a.course_id);
     const courseName = course?.name || "Course";
     const { event_date, event_time } = formatDueDateParts(a.due_at);
     const id = syntheticAssignmentId(Number(a.id));
@@ -131,9 +94,9 @@ export async function fetchCanvasMergeNotifications(): Promise<Notification[]> {
     };
   });
 
-  const announcementNotifs: Notification[] = allAnnsRaw.flat().map((a: any) => {
+  const announcementNotifs: Notification[] = allAnnsRaw.flat().map((a) => {
     const courseId = parseInt(String(a.context_code || "").replace("course_", ""), 10);
-    const course = filteredCourses.find((c: any) => c.id === courseId);
+    const course = filteredCourses.find((c) => c.id === courseId);
     const courseName = course?.name || "Course";
     const posted = a.posted_at ? new Date(a.posted_at) : new Date();
     const y = posted.getFullYear();
@@ -155,42 +118,9 @@ export async function fetchCanvasMergeNotifications(): Promise<Notification[]> {
     };
   });
 
-  const all = [...assignmentNotifs, ...announcementNotifs];
-  return filterCanvasWithGemini(all);
+  return [...assignmentNotifs, ...announcementNotifs];
 }
 
-/**
- * Sends Canvas notifications to /api/canvas-filter so Gemini can drop repetitive
- * same-course announcements while always preserving assignments and cross-course items.
- */
-async function filterCanvasWithGemini(items: Notification[]): Promise<Notification[]> {
-  if (items.length === 0) return items;
-  try {
-    const payload = items.map((n) => ({
-      id: n.id,
-      source: n.source,
-      category: n.category,
-      summary: n.summary,
-      event_date: n.event_date,
-    }));
-    const res = await fetch("/api/canvas-filter", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: payload }),
-    });
-    if (!res.ok) return items;
-    const data = (await res.json()) as { keepIds?: number[] };
-    if (!Array.isArray(data.keepIds) || data.keepIds.length === 0) return items;
-    const keep = new Set<number>(data.keepIds);
-    return items.filter((n) => keep.has(n.id));
-  } catch {
-    return items;
-  }
-}
-
-/**
- * Dedupe: prefer Supabase rows when same course + summary + event_date match a Canvas row.
- */
 export function mergeNotificationsDedupe(
   supabaseRows: Notification[],
   canvasRows: Notification[]

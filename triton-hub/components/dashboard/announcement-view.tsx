@@ -74,9 +74,9 @@ export function AnnouncementView() {
                 });
 
                 setAnnouncements(items);
-            } catch (err: any) {
+            } catch (err) {
                 console.error(err);
-                setError(err.message || "Failed to fetch announcements");
+                setError(err instanceof Error ? err.message : "Failed to fetch announcements");
             } finally {
                 setLoading(false);
             }

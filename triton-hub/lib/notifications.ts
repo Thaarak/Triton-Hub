@@ -19,37 +19,8 @@ export type InboxEmailFetchResult = {
   message?: string;
 };
 
-/** Last inbox fetch summary for manual debugging (DevTools → Application → Session Storage → `triton_last_inbox_debug`). */
-export function writeInboxDebugSnapshot(result: InboxEmailFetchResult): void {
-  if (typeof sessionStorage === "undefined") return;
-  try {
-    sessionStorage.setItem(
-      "triton_last_inbox_debug",
-      JSON.stringify({
-        at: new Date().toISOString(),
-        emailsCount: result.emails.length,
-        error: result.error ?? null,
-        message: result.message ?? null,
-      })
-    );
-  } catch {
-    // ignore quota / private mode
-  }
-}
-
-async function postInboxEmailsOnce(): Promise<InboxEmailFetchResult> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const res = await fetch("/api/emails", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      provider_token: session?.provider_token ?? null,
-      provider_refresh_token: session?.provider_refresh_token ?? null,
-    }),
-  });
+async function fetchInboxOnce(): Promise<InboxEmailFetchResult> {
+  const res = await fetch("/api/emails", { cache: "no-store" });
   if (!res.ok) {
     if (res.status === 401) {
       return {
@@ -92,39 +63,11 @@ async function postInboxEmailsOnce(): Promise<InboxEmailFetchResult> {
   };
 }
 
-/**
- * Loads inbox via POST /api/emails with Google tokens from the browser session.
- * Server cookie session often omits provider_token; the client must send it.
- * Runs initialize(), then retries once after refreshSession() if Gmail tokens are still missing.
- */
 export async function fetchInboxEmailsFromApi(): Promise<InboxEmailFetchResult> {
-  if (typeof window === "undefined") {
-    return { emails: [] };
-  }
   try {
-    await supabase.auth.initialize();
-    let result = await postInboxEmailsOnce();
-
-    if (
-      result.emails.length === 0 &&
-      result.error === "no_provider_token"
-    ) {
-      await supabase.auth.refreshSession();
-      result = await postInboxEmailsOnce();
-    }
-
-    writeInboxDebugSnapshot(result);
-    return result;
-  } catch (err) {
-    console.error("[fetchInboxEmailsFromApi]", err);
-    const failed: InboxEmailFetchResult = {
-      emails: [],
-      error: "inbox_client_error",
-      message:
-        "Inbox request failed in the browser (network blocked, extension, or session error). Check the console and Network tab for POST /api/emails.",
-    };
-    writeInboxDebugSnapshot(failed);
-    return failed;
+    return await fetchInboxOnce();
+  } catch {
+    return { emails: [], error: "inbox_client_error", message: "Could not load Gmail." };
   }
 }
 
@@ -226,7 +169,7 @@ export async function fetchNotifications(): Promise<FetchNotificationsResult> {
   }
 
   const inbox =
-    typeof window !== "undefined"
+    typeof window !== "undefined" && session && getNotificationSourceFilter() !== "canvas"
       ? await fetchInboxEmailsFromApi()
       : emptyInbox;
   rows = mergeRawEmailsIntoNotifications(rows, inbox.emails);
@@ -248,7 +191,7 @@ export async function fetchNotifications(): Promise<FetchNotificationsResult> {
 function applySourceFilter(rows: Notification[]): Notification[] {
   const sourceFilter = getNotificationSourceFilter();
   if (sourceFilter === "both") return rows;
-  return rows.filter((n) => getNotificationDataOrigin(n) === sourceFilter);
+  return rows.filter((n) => n.source === "Personal" || getNotificationDataOrigin(n) === sourceFilter);
 }
 
 /**

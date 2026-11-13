@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Suspense, FormEvent, useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -14,6 +14,7 @@ import {
   setNotificationSourceFilter,
   type NotificationSourceFilter,
 } from "@/lib/user-preferences";
+import { ConnectionSettings } from "./connection-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -208,6 +209,8 @@ export function SettingsView() {
         </p>
       </div>
 
+      <Suspense><ConnectionSettings /></Suspense>
+
       <section className="rounded-[28px] border border-white/10 bg-card/80 p-6 space-y-4 shadow-sm">
         <h2 className="text-lg font-semibold">Content</h2>
         <div className="space-y-2">
@@ -228,29 +231,6 @@ export function SettingsView() {
             Applies to announcements, assignments, and calendar views. &quot;Show canvas only&quot; hides Gmail-merged
             items from your feed.
           </p>
-          <details className="rounded-xl border border-white/10 bg-secondary/30 px-3 py-2 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground/90">If Gmail never appears on Home</summary>
-            <ul className="mt-2 list-inside list-disc space-y-1 pl-1">
-              <li>
-                <strong className="text-foreground">schema_outdated</strong> — Run{" "}
-                <code className="rounded bg-muted px-1">supabase/gmail_refresh_token.sql</code> in the Supabase SQL editor.
-              </li>
-              <li>
-                <strong className="text-foreground">no_provider_token</strong> — Sign out and sign in with Google again;
-                set <code className="rounded bg-muted px-1">GOOGLE_CLIENT_ID</code> /{" "}
-                <code className="rounded bg-muted px-1">GOOGLE_CLIENT_SECRET</code> on the host (same OAuth client as
-                Supabase Google).
-              </li>
-              <li>
-                <strong className="text-foreground">gmail_api_error</strong> — Re-auth; enable Gmail API and{" "}
-                <code className="rounded bg-muted px-1">gmail.readonly</code> on the OAuth client.
-              </li>
-              <li>
-                After Refresh, check DevTools → Application → Session Storage →{" "}
-                <code className="rounded bg-muted px-1">triton_last_inbox_debug</code> for the last inbox result.
-              </li>
-            </ul>
-          </details>
         </div>
         <Button type="button" className="rounded-full px-5" onClick={handleSaveContent}>Save content preferences</Button>
       </section>
