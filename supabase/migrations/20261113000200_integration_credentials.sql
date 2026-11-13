@@ -13,3 +13,8 @@ grant select, insert, update, delete on public.integration_credentials to servic
 -- Legacy plaintext tokens are deliberately discarded. Users reconnect once.
 alter table public.profiles drop column if exists canvas_token;
 alter table public.profiles drop column if exists google_refresh_token;
+
+-- Early sign-up code also stored Canvas tokens in Auth user metadata.
+update auth.users
+set raw_user_meta_data = raw_user_meta_data - 'canvas_token'
+where raw_user_meta_data ? 'canvas_token';
