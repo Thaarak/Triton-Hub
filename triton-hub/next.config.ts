@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 if (
   process.env.VERCEL_ENV === "production" &&
+  process.env.NEXT_PUBLIC_SUPABASE_URL &&
   !process.env.NEXT_PUBLIC_SITE_URL?.trim()
 ) {
   throw new Error(
@@ -9,15 +10,6 @@ if (
   );
 }
 
-const nextConfig: NextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: '/canvas-api/:path*',
-        destination: 'https://canvas.ucsd.edu/:path*',
-      },
-    ];
-  },
-};
+const nextConfig: NextConfig = {};
 
 export default nextConfig;

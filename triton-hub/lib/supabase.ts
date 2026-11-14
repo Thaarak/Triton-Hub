@@ -1,22 +1,9 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { supabaseKey, supabaseUrl } from "./auth-config";
 
-/**
- * Browser Supabase client: PKCE + session state live in cookies (via @supabase/ssr),
- * which survives the Google redirect. Plain createClient() stored the verifier in
- * localStorage and broke the OAuth return.
- *
- * With detectSessionInUrl (default), the client exchanges ?code= during initialize().
- * The /auth/callback page must not call exchangeCodeForSession again.
- */
+// The public demo has no credentials. Auth entry points check configuration before use.
 export const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    auth: {
-      flowType: "pkce",
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true,
-    },
-  }
+  supabaseUrl || "http://127.0.0.1:54321",
+  supabaseKey || "demo-only",
+  { auth: { flowType: "pkce" } },
 );

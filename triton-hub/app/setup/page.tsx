@@ -9,14 +9,6 @@ import { supabase } from "@/lib/supabase";
 import { needsCanvasSetup } from "@/lib/canvas-setup";
 import { AuthShell } from "@/components/marketing/auth-shell";
 
-const CANVAS_URL_KEY = "canvas_url";
-const CANVAS_TOKEN_KEY = "canvas_token";
-const DEFAULT_CANVAS_URL = "https://canvas.ucsd.edu";
-
-/**
- * Required onboarding: save Canvas access token to Supabase profile and sessionStorage
- * so the rest of the app can load courses and assignments.
- */
 export default function SetupPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
@@ -35,7 +27,7 @@ export default function SetupPage() {
         return;
       }
 
-      if (!(await needsCanvasSetup(session.user.id))) {
+      if (!new URLSearchParams(window.location.search).has("edit") && !(await needsCanvasSetup().catch(() => true))) {
         router.replace("/");
         return;
       }
@@ -65,21 +57,14 @@ export default function SetupPage() {
         return;
       }
 
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({
-          canvas_token: trimmed,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", session.user.id);
-
-      if (updateError) throw updateError;
-
-      if (typeof sessionStorage !== "undefined") {
-        sessionStorage.setItem(CANVAS_TOKEN_KEY, trimmed);
-        sessionStorage.setItem(CANVAS_URL_KEY, DEFAULT_CANVAS_URL);
-      }
-
+      const response = await fetch("/api/integrations/canvas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: trimmed }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not connect Canvas.");
+      setToken("");
       router.replace("/");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not save your token.");

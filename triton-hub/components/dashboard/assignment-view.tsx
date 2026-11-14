@@ -84,9 +84,9 @@ export function AssignmentView() {
                 });
 
                 setAssignments(items);
-            } catch (err: any) {
+            } catch (err) {
                 console.error(err);
-                setError(err.message || "Failed to fetch assignments");
+                setError(err instanceof Error ? err.message : "Failed to fetch assignments");
             } finally {
                 setLoading(false);
             }
@@ -274,7 +274,7 @@ export function AssignmentView() {
                 <div className="flex h-64 flex-col items-center justify-center rounded-[28px] border border-white/10 bg-card/80">
                     <CalendarIcon className="h-10 w-10 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground font-medium">No upcoming assignments found!</p>
-                    <p className="text-xs text-muted-foreground mt-1">You're all caught up.</p>
+                    <p className="text-xs text-muted-foreground mt-1">You&apos;re all caught up.</p>
                 </div>
             )}
         </div>

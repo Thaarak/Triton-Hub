@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Dashboard } from "@/components/dashboard/dashboard";
 import { LandingPage } from "@/components/marketing/landing-page";
 import { Loader2 } from "lucide-react";
+import { hasSupabaseConfig } from "@/lib/auth-config";
 import { supabase } from "@/lib/supabase";
 import { needsCanvasSetup } from "@/lib/canvas-setup";
 
@@ -18,11 +19,12 @@ export default function Home() {
 
   useEffect(() => {
     const checkAuth = async () => {
+      if (!hasSupabaseConfig) return;
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (session) {
-        if (await needsCanvasSetup(session.user.id)) {
+        if (await needsCanvasSetup().catch(() => false)) {
           setAuthState("needs_setup");
           return;
         }
@@ -59,6 +61,8 @@ export default function Home() {
       router.replace("/setup");
     }
   }, [authState, router]);
+
+  if (!hasSupabaseConfig) return <LandingPage />;
 
   if (authState === "needs_setup") {
     return (

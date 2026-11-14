@@ -13,11 +13,9 @@ import { format } from "date-fns";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
-import { hydrateCanvasTokenFromSupabase } from "@/lib/canvas-setup";
-import { syncGmailRefreshTokenToProfile } from "@/lib/gmail-sync";
 import { fetchAndTransformNotifications, type InboxEmailFetchResult } from "@/lib/notifications";
 import { getNotificationSourceFilter } from "@/lib/user-preferences";
-import { syncCanvasData } from "@/lib/canvas";
+import { getCanvasClassCards } from "@/lib/canvas";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -65,11 +63,6 @@ export function Dashboard() {
         return;
       }
 
-      if (session) {
-        await hydrateCanvasTokenFromSupabase(session.user.id);
-        await syncGmailRefreshTokenToProfile();
-      }
-
       setFeedSourceFilter(getNotificationSourceFilter());
 
       const { updates: notificationUpdates, inbox } = await fetchAndTransformNotifications();
@@ -103,36 +96,11 @@ export function Dashboard() {
       const personalFilterKey = "Personal";
       const hasPersonal = notificationUpdates.some((update) => update.course === personalFilterKey);
 
-      if (typeof window !== "undefined") {
-        const canvasToken = sessionStorage.getItem("canvas_token");
-        const canvasUrl = sessionStorage.getItem("canvas_url") || undefined;
-
-        if (canvasToken) {
-          try {
-            const canvasData = await syncCanvasData(canvasToken, canvasUrl);
-            nextClasses.push(
-              ...canvasData.classes.map((course: {
-                id: number;
-                name: string;
-                courseCode: string;
-                professor: string | null;
-                term: string | null;
-                currentScore: number | null;
-                currentGrade: string | null;
-              }) => ({
-                id: course.id,
-                name: course.name,
-                courseCode: course.courseCode || course.name,
-                filterKey: course.name,
-                professor: course.professor,
-                term: course.term,
-                currentScore: course.currentScore,
-                currentGrade: course.currentGrade,
-              }))
-            );
-          } catch (canvasError) {
-            console.error("Failed to load Canvas class cards:", canvasError);
-          }
+      if (session) {
+        try {
+          nextClasses.push(...await getCanvasClassCards());
+        } catch {
+          toast.error("Could not load Canvas courses. Check your connection in Settings.");
         }
       }
 

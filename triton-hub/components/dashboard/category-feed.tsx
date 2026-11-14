@@ -115,7 +115,7 @@ export function CategoryFeed({ category, title, description }: CategoryFeedProps
                 No {title.toLowerCase()} found
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
-                You're all caught up! No {title.toLowerCase()} at the moment.
+                You&apos;re all caught up! No {title.toLowerCase()} at the moment.
               </p>
             </div>
           ) : (

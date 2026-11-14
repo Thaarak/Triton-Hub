@@ -152,7 +152,7 @@ export function CalendarView() {
       const { notifications } = await fetchNotifications();
 
       const assignmentNotifs = notifications.filter(
-        (n: Notification) => n.category === "assignment"
+        (n: Notification) => ["assignment", "personal", "event", "exam"].includes(n.category)
       );
 
       const calendarEvents: CalendarEvent[] = assignmentNotifs.map((notif: Notification) => {

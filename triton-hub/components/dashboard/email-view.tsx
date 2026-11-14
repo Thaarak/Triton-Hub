@@ -17,6 +17,14 @@ interface EmailItem {
     isRecent: boolean;
 }
 
+    // Parse "Name <email@example.com>" format to just show name or email
+function parseFromField(from: string): string {
+        if (!from) return "Unknown";
+        const match = from.match(/^(.+?)\s*<.+>$/);
+        if (match) return match[1].replace(/"/g, "");
+        return from;
+}
+
 export function EmailView() {
     const [emails, setEmails] = useState<EmailItem[] | null>(null);
     const [loading, setLoading] = useState(true);
@@ -62,7 +70,7 @@ export function EmailView() {
             const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
             // Transform to EmailItem format
-            const items: EmailItem[] = emailList.map((e: any) => {
+            const items: EmailItem[] = emailList.map((e) => {
                 const emailDate = e.date ? new Date(e.date) : null;
                 return {
                     id: e.id,
@@ -75,9 +83,9 @@ export function EmailView() {
             });
 
             setEmails(items);
-        } catch (err: any) {
+        } catch (err) {
             console.error(err);
-            setError(err.message || "Failed to fetch emails");
+            setError(err instanceof Error ? err.message : "Failed to fetch emails");
         } finally {
             setLoading(false);
         }
@@ -86,14 +94,6 @@ export function EmailView() {
     useEffect(() => {
         loadEmails();
     }, []);
-
-    // Parse "Name <email@example.com>" format to just show name or email
-    const parseFromField = (from: string): string => {
-        if (!from) return "Unknown";
-        const match = from.match(/^(.+?)\s*<.+>$/);
-        if (match) return match[1].replace(/"/g, "");
-        return from;
-    };
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return "Unknown date";
@@ -253,7 +253,7 @@ export function EmailView() {
                         {showRead ? "No read emails" : "No unread emails!"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                        {showRead ? "Mark some emails as read to see them here." : "You're all caught up!"}
+                        {showRead ? "Mark some emails as read to see them here." : "You&apos;re all caught up!"}
                     </p>
                 </div>
             )}

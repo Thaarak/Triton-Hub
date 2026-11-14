@@ -31,10 +31,11 @@ export function CourseList({ classes, onCourseClick, className }: CourseListProp
     return (
         <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-4", className)}>
             {classes.map((cls) => (
-                <div
+                <button
+                    type="button"
                     key={cls.id}
                     onClick={() => onCourseClick(cls.filterKey ?? cls.courseCode)}
-                    className="group relative overflow-hidden p-5 rounded-2xl border border-border bg-card hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 cursor-pointer active:scale-[0.98]"
+                    className="group relative overflow-hidden text-left p-5 rounded-2xl border border-border bg-card hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 cursor-pointer active:scale-[0.98]"
                 >
                     {/* Decorative background element */}
                     <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-primary/5 blur-2xl group-hover:bg-primary/10 transition-colors" />
@@ -77,7 +78,7 @@ export function CourseList({ classes, onCourseClick, className }: CourseListProp
                             ) : null}
                         </div>
                     </div>
-                </div>
+                </button>
             ))}
         </div>
     );
